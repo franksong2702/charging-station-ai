@@ -1,0 +1,52 @@
+## 项目概述
+- **名称**: 充电桩智能客服工作流
+- **功能**: 为充电桩小程序提供智能客服服务，自动识别用户问题类型并给出专业回复
+
+### 节点清单
+| 节点名 | 文件位置 | 类型 | 功能描述 | 分支逻辑 | 配置文件 |
+|-------|---------|------|---------|---------|---------|
+| intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（使用指导/故障处理/投诉兜底） | - | `config/intent_recognition_llm_cfg.json` |
+| route_by_intent | `graph.py` | condition | 根据意图路由到不同处理流程 | "使用指导"→knowledge_qa, "故障处理"→knowledge_qa, "投诉兜底"→info_collection | - |
+| knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 搜索知识库并生成回复 | - | `config/knowledge_qa_llm_cfg.json` |
+| info_collection | `nodes/info_collection_node.py` | agent | 提取用户投诉信息（手机号、订单号、问题描述） | - | `config/info_collection_llm_cfg.json` |
+| email_sending | `nodes/email_sending_node.py` | task | 发送投诉信息到客服邮箱 | - | - |
+
+**类型说明**: task(task节点) / agent(大模型) / condition(条件分支) / looparray(列表循环) / loopcond(条件循环)
+
+## 子图清单
+无子图
+
+## 技能使用
+- 节点 `intent_recognition` 使用技能：大语言模型
+- 节点 `knowledge_qa` 使用技能：大语言模型, 知识库
+- 节点 `info_collection` 使用技能：大语言模型
+- 节点 `email_sending` 使用技能：邮件
+
+## 知识库
+- 数据集名称: `charging_station_kb`
+- 文档ID: `7619187998604853258`
+- 内容: 充电桩知识库.md（包含扫码指引、故障处理、计费问题等）
+
+## 工作流逻辑
+```
+用户消息
+    ↓
+【意图识别】→ 判断问题类型
+    ↓
+    ├── 使用指导/故障处理 → 【知识库问答】→ 回复用户
+    │
+    └── 投诉兜底 → 【信息收集】→ 【邮件发送】→ 告知用户已收到
+```
+
+## 测试场景
+1. **使用指导场景**: "我看到充电桩上有很多二维码，不知道应该扫哪一个？我是特斯拉的车。"
+2. **故障处理场景**: "充电停不下来了，我点了停止按钮但是还在继续充电，怎么办？"
+3. **投诉兜底场景**: "我刚才充电扣了50块钱，但是实际只充了20块钱的电，要求退款！我的手机号是13800138000，订单号是12345678"
+
+## 邮件配置说明
+邮件发送功能需要配置SMTP服务器信息。当前配置的收件邮箱为：`xuefu.song@qq.com`
+
+配置步骤：
+1. 在平台集成配置中添加邮件集成（integration-email-imap-smtp）
+2. 配置SMTP服务器地址、端口、账号和授权码
+3. 工作流会自动从集成配置中读取邮件发送信息
