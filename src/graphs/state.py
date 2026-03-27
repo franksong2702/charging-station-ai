@@ -1,5 +1,6 @@
 """
 充电桩智能客服工作流状态定义
+支持文字和语音输入
 """
 from typing import Literal, Optional, List, Dict, Any
 from pydantic import BaseModel, Field
@@ -9,7 +10,8 @@ from pydantic import BaseModel, Field
 
 class GlobalState(BaseModel):
     """全局状态定义 - 包含工作流执行过程中的所有数据"""
-    user_message: str = Field(default="", description="用户发送的消息")
+    user_message: str = Field(default="", description="用户发送的消息（文字或语音转写后的文字）")
+    voice_url: str = Field(default="", description="用户发送的语音URL（可选）")
     intent: str = Field(default="", description="识别的意图类型：usage_guidance(使用指导), fault_handling(故障处理), complaint(投诉兜底)")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
     user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（手机号、订单号、问题描述等）")
@@ -21,12 +23,38 @@ class GlobalState(BaseModel):
 
 class GraphInput(BaseModel):
     """工作流的输入"""
-    user_message: str = Field(..., description="用户发送的消息")
+    user_message: str = Field(default="", description="用户发送的文字消息")
+    voice_url: str = Field(default="", description="用户发送的语音URL（可选，如来自微信语音消息）")
 
 
 class GraphOutput(BaseModel):
     """工作流的输出"""
     reply_content: str = Field(..., description="回复给用户的内容")
+
+
+# ==================== 输入预处理节点 ====================
+
+class InputProcessInput(BaseModel):
+    """输入预处理节点的输入"""
+    user_message: str = Field(default="", description="用户发送的文字消息")
+    voice_url: str = Field(default="", description="用户发送的语音URL")
+
+
+class InputProcessOutput(BaseModel):
+    """输入预处理节点的输出"""
+    processed: bool = Field(default=True, description="是否已处理")
+
+
+# ==================== ASR 语音转文字节点 ====================
+
+class ASRInput(BaseModel):
+    """ASR节点的输入"""
+    voice_url: str = Field(..., description="语音文件的URL")
+
+
+class ASROutput(BaseModel):
+    """ASR节点的输出"""
+    user_message: str = Field(..., description="语音转写的文字内容")
 
 
 # ==================== 意图识别节点 ====================
