@@ -168,13 +168,11 @@ builder.add_conditional_edges(
     }
 )
 
-# 知识库问答后保存记录
-builder.add_edge("knowledge_qa", "save_record")
-builder.add_edge("save_record", END)
+# 知识库问答后直接结束（暂时移除保存记录功能）
+builder.add_edge("knowledge_qa", END)
 
-# 评价反馈后保存记录
-builder.add_edge("feedback", "save_record")
-# save_record 已经连接到 END
+# 评价反馈后直接结束（暂时移除保存记录功能）
+builder.add_edge("feedback", END)
 
 # 投诉处理流程
 builder.add_edge("info_collection", "email_sending")
