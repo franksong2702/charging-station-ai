@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入
+支持文字和语音输入，支持评价机制和对话记录保存
 """
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
@@ -14,6 +14,8 @@ from graphs.state import (
     ASRInput,
     IntentRecognitionInput,
     KnowledgeQAInput,
+    FeedbackInput,
+    SaveRecordInput,
     InfoCollectionInput,
     EmailSendingInput
 )
@@ -22,6 +24,8 @@ from graphs.nodes.input_process_node import input_process_node
 from graphs.nodes.asr_node import asr_node
 from graphs.nodes.intent_recognition_node import intent_recognition_node
 from graphs.nodes.knowledge_qa_node import knowledge_qa_node
+from graphs.nodes.feedback_node import feedback_node
+from graphs.nodes.save_record_node import save_record_node
 from graphs.nodes.info_collection_node import info_collection_node
 from graphs.nodes.email_sending_node import email_sending_node
 
@@ -53,6 +57,10 @@ def route_by_intent(state: GlobalState) -> str:
         return "故障处理"
     elif intent == "complaint":
         return "投诉兜底"
+    elif intent == "feedback_good":
+        return "评价反馈"
+    elif intent == "feedback_bad":
+        return "评价反馈"
     else:
         # 默认走知识库问答
         return "使用指导"
@@ -100,6 +108,22 @@ builder.add_node(
 )
 
 builder.add_node(
+    "feedback",
+    feedback_node,
+    metadata={
+        "type": "task"
+    }
+)
+
+builder.add_node(
+    "save_record",
+    save_record_node,
+    metadata={
+        "type": "task"
+    }
+)
+
+builder.add_node(
     "info_collection",
     info_collection_node,
     metadata={
@@ -139,12 +163,20 @@ builder.add_conditional_edges(
     path_map={
         "使用指导": "knowledge_qa",
         "故障处理": "knowledge_qa",
-        "投诉兜底": "info_collection"
+        "投诉兜底": "info_collection",
+        "评价反馈": "feedback"
     }
 )
 
-# 添加后续边
-builder.add_edge("knowledge_qa", END)
+# 知识库问答后保存记录
+builder.add_edge("knowledge_qa", "save_record")
+builder.add_edge("save_record", END)
+
+# 评价反馈后保存记录
+builder.add_edge("feedback", "save_record")
+# save_record 已经连接到 END
+
+# 投诉处理流程
 builder.add_edge("info_collection", "email_sending")
 builder.add_edge("email_sending", END)
 

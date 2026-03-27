@@ -22,11 +22,25 @@ def intent_recognition_node(
 ) -> IntentRecognitionOutput:
     """
     title: 意图识别
-    desc: 分析用户消息，判断问题类型（使用指导/故障处理/投诉兜底）
+    desc: 分析用户消息，判断问题类型（使用指导/故障处理/投诉兜底/评价反馈）
     integrations: 大语言模型
     """
     # 获取上下文
     ctx = runtime.context
+    
+    user_message = state.user_message.strip()
+    
+    # 优先判断是否为评价反馈
+    # 用户回复 "1" 或 "2" 表示评价
+    if user_message == "1" or user_message == "【1】":
+        return IntentRecognitionOutput(intent="feedback_good")
+    if user_message == "2" or user_message == "【2】":
+        return IntentRecognitionOutput(intent="feedback_bad")
+    # 也支持文字形式评价
+    if user_message in ["很好", "满意", "有帮助"]:
+        return IntentRecognitionOutput(intent="feedback_good")
+    if user_message in ["没有帮助", "不满意", "没用"]:
+        return IntentRecognitionOutput(intent="feedback_bad")
     
     # 读取配置文件
     cfg_file = os.path.join(

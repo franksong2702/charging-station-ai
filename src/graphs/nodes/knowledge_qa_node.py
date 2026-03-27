@@ -198,7 +198,18 @@ def knowledge_qa_node(
     else:
         reply_content = str(content).strip()
     
+    # 添加评价提示（只针对知识库问答场景）
+    feedback_prompt = """
+
+───────────
+您对本次回答满意吗？
+回复【1】很好
+回复【2】没有帮助"""
+    
+    reply_content_with_feedback = reply_content + feedback_prompt
+    
     return KnowledgeQAOutput(
-        reply_content=reply_content,
-        knowledge_chunks=knowledge_chunks
+        reply_content=reply_content_with_feedback,
+        knowledge_chunks=knowledge_chunks,
+        need_feedback=True
     )

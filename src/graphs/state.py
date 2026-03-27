@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流状态定义
-支持文字和语音输入
+支持文字和语音输入，支持评价机制
 """
 from typing import Literal, Optional, List, Dict, Any
 from pydantic import BaseModel, Field
@@ -12,11 +12,13 @@ class GlobalState(BaseModel):
     """全局状态定义 - 包含工作流执行过程中的所有数据"""
     user_message: str = Field(default="", description="用户发送的消息（文字或语音转写后的文字）")
     voice_url: str = Field(default="", description="用户发送的语音URL（可选）")
-    intent: str = Field(default="", description="识别的意图类型：usage_guidance(使用指导), fault_handling(故障处理), complaint(投诉兜底)")
+    intent: str = Field(default="", description="识别的意图类型：usage_guidance(使用指导), fault_handling(故障处理), complaint(投诉兜底), feedback(评价反馈)")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
     user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（手机号、订单号、问题描述等）")
     reply_content: str = Field(default="", description="回复给用户的内容")
     email_sent: bool = Field(default=False, description="邮件是否已发送")
+    feedback_type: str = Field(default="", description="评价类型：good(很好), bad(没有帮助)")
+    need_feedback: bool = Field(default=False, description="是否需要请求用户评价")
 
 
 # ==================== 图的输入输出 ====================
@@ -81,6 +83,36 @@ class KnowledgeQAOutput(BaseModel):
     """知识库问答节点的输出"""
     reply_content: str = Field(..., description="回复给用户的内容")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
+    need_feedback: bool = Field(default=True, description="是否需要请求用户评价")
+
+
+# ==================== 评价反馈节点 ====================
+
+class FeedbackInput(BaseModel):
+    """评价反馈节点的输入"""
+    user_message: str = Field(..., description="用户发送的评价消息")
+
+
+class FeedbackOutput(BaseModel):
+    """评价反馈节点的输出"""
+    feedback_type: str = Field(..., description="评价类型：good(很好), bad(没有帮助)")
+    reply_content: str = Field(..., description="回复内容")
+
+
+# ==================== 记录保存节点 ====================
+
+class SaveRecordInput(BaseModel):
+    """记录保存节点的输入"""
+    user_message: str = Field(..., description="用户发送的消息")
+    reply_content: str = Field(..., description="AI回复内容")
+    intent: str = Field(default="", description="意图类型")
+    feedback_type: str = Field(default="", description="评价类型")
+    knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
+
+
+class SaveRecordOutput(BaseModel):
+    """记录保存节点的输出"""
+    saved: bool = Field(default=True, description="是否保存成功")
 
 
 # ==================== 信息收集节点 ====================
