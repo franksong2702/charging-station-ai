@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入，支持评价机制和对话记录保存
+支持文字和语音输入，支持评价机制
 """
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
@@ -15,7 +15,6 @@ from graphs.state import (
     IntentRecognitionInput,
     KnowledgeQAInput,
     FeedbackInput,
-    SaveRecordInput,
     InfoCollectionInput,
     EmailSendingInput
 )
@@ -25,7 +24,6 @@ from graphs.nodes.asr_node import asr_node
 from graphs.nodes.intent_recognition_node import intent_recognition_node
 from graphs.nodes.knowledge_qa_node import knowledge_qa_node
 from graphs.nodes.feedback_node import feedback_node
-from graphs.nodes.save_record_node import save_record_node
 from graphs.nodes.info_collection_node import info_collection_node
 from graphs.nodes.email_sending_node import email_sending_node
 
@@ -116,14 +114,6 @@ builder.add_node(
 )
 
 builder.add_node(
-    "save_record",
-    save_record_node,
-    metadata={
-        "type": "task"
-    }
-)
-
-builder.add_node(
     "info_collection",
     info_collection_node,
     metadata={
@@ -168,10 +158,10 @@ builder.add_conditional_edges(
     }
 )
 
-# 知识库问答后直接结束（暂时移除保存记录功能）
+# 知识库问答后直接结束
 builder.add_edge("knowledge_qa", END)
 
-# 评价反馈后直接结束（暂时移除保存记录功能）
+# 评价反馈后直接结束
 builder.add_edge("feedback", END)
 
 # 投诉处理流程
