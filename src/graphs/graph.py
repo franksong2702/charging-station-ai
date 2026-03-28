@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入，支持评价机制
+支持文字和语音输入，支持评价机制，支持多轮对话
 """
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
@@ -16,7 +16,9 @@ from graphs.state import (
     KnowledgeQAInput,
     FeedbackInput,
     InfoCollectionInput,
-    EmailSendingInput
+    EmailSendingInput,
+    LoadHistoryInput,
+    SaveHistoryInput
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -26,6 +28,8 @@ from graphs.nodes.knowledge_qa_node import knowledge_qa_node
 from graphs.nodes.feedback_node import feedback_node
 from graphs.nodes.info_collection_node import info_collection_node
 from graphs.nodes.email_sending_node import email_sending_node
+from graphs.nodes.load_history_node import load_history_node
+from graphs.nodes.save_history_node import save_history_node
 
 
 # ==================== 条件判断函数 ====================
@@ -64,6 +68,17 @@ def route_by_intent(state: GlobalState) -> str:
         return "使用指导"
 
 
+def route_by_user_id(state: GlobalState) -> str:
+    """
+    title: 用户ID判断
+    desc: 判断是否有用户ID，决定是否需要加载对话历史
+    """
+    if state.user_id and state.user_id.strip():
+        return "加载历史"
+    else:
+        return "跳过历史"
+
+
 # ==================== 主图编排 ====================
 
 # 创建状态图
@@ -74,6 +89,14 @@ builder = StateGraph(
 )
 
 # 添加节点
+builder.add_node(
+    "load_history",
+    load_history_node,
+    metadata={
+        "type": "task"
+    }
+)
+
 builder.add_node(
     "input_process",
     input_process_node
@@ -130,8 +153,19 @@ builder.add_node(
     }
 )
 
-# 设置入口点
-builder.set_entry_point("input_process")
+builder.add_node(
+    "save_history",
+    save_history_node,
+    metadata={
+        "type": "task"
+    }
+)
+
+# 设置入口点：先判断是否需要加载历史
+builder.set_entry_point("load_history")
+
+# 加载历史后，进入输入处理
+builder.add_edge("load_history", "input_process")
 
 # 添加条件分支：判断是否有语音输入
 builder.add_conditional_edges(
@@ -158,8 +192,9 @@ builder.add_conditional_edges(
     }
 )
 
-# 知识库问答后直接结束
-builder.add_edge("knowledge_qa", END)
+# 知识库问答后保存历史
+builder.add_edge("knowledge_qa", "save_history")
+builder.add_edge("save_history", END)
 
 # 评价反馈后直接结束
 builder.add_edge("feedback", END)

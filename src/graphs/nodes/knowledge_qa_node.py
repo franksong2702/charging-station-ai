@@ -1,5 +1,5 @@
 """
-知识库问答节点 - 基于知识库回答用户问题
+知识库问答节点 - 基于知识库回答用户问题，支持多轮对话上下文
 """
 import os
 import json
@@ -11,7 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from coze_coding_dev_sdk import KnowledgeClient, LLMClient, Config
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from jinja2 import Template
 
 from graphs.state import KnowledgeQAInput, KnowledgeQAOutput
@@ -154,11 +154,22 @@ def knowledge_qa_node(
     # 初始化 LLM 客户端
     llm_client = LLMClient(ctx=ctx)
     
-    # 构建消息
-    messages = [
-        SystemMessage(content=sp),
-        HumanMessage(content=user_prompt_content)
-    ]
+    # 构建消息（包含对话历史）
+    messages = [SystemMessage(content=sp)]
+    
+    # 添加对话历史（如果有）
+    if state.conversation_history:
+        logger.info(f"加载对话历史，共 {len(state.conversation_history)} 条消息")
+        for msg in state.conversation_history:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+    
+    # 添加当前用户消息
+    messages.append(HumanMessage(content=user_prompt_content))
     
     # 调用 LLM（带重试）
     max_llm_retries = 3
