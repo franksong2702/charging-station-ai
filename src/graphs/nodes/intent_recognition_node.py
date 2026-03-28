@@ -31,10 +31,10 @@ def intent_recognition_node(
     user_message = state.user_message.strip()
     
     # 优先判断是否为评价反馈
-    # 用户回复 "1" 或 "2" 表示评价
-    if user_message == "1" or user_message == "【1】":
+    # 用户回复 "1" 或 "2" 表示评价（支持半角/全角）
+    if user_message in ["1", "１", "【1】", "【１】"]:
         return IntentRecognitionOutput(intent="feedback_good")
-    if user_message == "2" or user_message == "【2】":
+    if user_message in ["2", "２", "【2】", "【２】"]:
         return IntentRecognitionOutput(intent="feedback_bad")
     # 也支持文字形式评价
     if user_message in ["很好", "满意", "有帮助"]:

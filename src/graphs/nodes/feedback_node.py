@@ -27,12 +27,12 @@ def feedback_node(
     
     user_message = state.user_message.strip()
     
-    # 判断评价类型
+    # 判断评价类型（支持半角/全角数字）
     feedback_type = "unknown"
-    if user_message in ["1", "【1】", "很好", "满意", "有帮助"]:
+    if user_message in ["1", "１", "【1】", "【１】", "很好", "满意", "有帮助"]:
         feedback_type = "good"
         reply_content = "感谢您的反馈！我们会继续努力为您提供更好的服务 😊"
-    elif user_message in ["2", "【2】", "没有帮助", "不满意", "没用"]:
+    elif user_message in ["2", "２", "【2】", "【２】", "没有帮助", "不满意", "没用"]:
         feedback_type = "bad"
         reply_content = "感谢您的反馈！很抱歉没能帮到您。您可以详细描述一下遇到的问题，或者回复「人工客服」联系人工处理。"
     else:
