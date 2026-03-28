@@ -108,8 +108,9 @@ class FeedbackOutput(BaseModel):
 
 class SaveRecordInput(BaseModel):
     """记录保存节点的输入"""
-    user_message: str = Field(..., description="用户发送的消息")
-    reply_content: str = Field(..., description="AI回复内容")
+    user_id: str = Field(default="", description="用户身份标识（可选）")
+    user_message: str = Field(default="", description="用户发送的消息")
+    reply_content: str = Field(default="", description="AI回复内容")
     intent: str = Field(default="", description="意图类型")
     feedback_type: str = Field(default="", description="评价类型")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")

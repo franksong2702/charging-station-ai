@@ -1,6 +1,6 @@
 ## 项目概述
 - **名称**: 充电桩智能客服工作流
-- **功能**: 为充电桩小程序提供智能客服服务，支持文字和语音输入，支持评价机制和多轮对话
+- **功能**: 为充电桩小程序提供智能客服服务，支持文字和语音输入，支持评价机制、多轮对话和对话记录保存
 
 ### 节点清单
 | 节点名 | 文件位置 | 类型 | 功能描述 | 分支逻辑 | 配置文件 |
@@ -12,7 +12,8 @@
 | intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（使用指导/故障处理/投诉兜底/评价反馈） | - | `config/intent_recognition_llm_cfg.json` |
 | route_by_intent | `graph.py` | condition | 根据意图路由到不同处理流程 | "使用指导"→knowledge_qa, "故障处理"→knowledge_qa, "投诉兜底"→info_collection, "评价反馈"→feedback | - |
 | knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 搜索知识库并生成回复（含评价提示） | - | `config/knowledge_qa_llm_cfg.json` |
-| save_history | `nodes/save_history_node.py` | task | 保存对话记录到数据库 | - | - |
+| save_history | `nodes/save_history_node.py` | task | 保存对话历史到数据库（用于多轮对话） | - | - |
+| save_record | `nodes/save_record_node.py` | task | 保存对话记录到数据库（用于分析） | - | - |
 | feedback | `nodes/feedback_node.py` | task | 处理用户评价反馈（很好/没有帮助） | - | - |
 | info_collection | `nodes/info_collection_node.py` | agent | 提取用户投诉信息（手机号、订单号、问题描述） | - | `config/info_collection_llm_cfg.json` |
 | email_sending | `nodes/email_sending_node.py` | task | 发送投诉信息到客服邮箱 | - | - |
@@ -30,6 +31,7 @@
 - 节点 `email_sending` 使用技能：邮件
 - 节点 `load_history` 使用技能：Supabase
 - 节点 `save_history` 使用技能：Supabase
+- 节点 `save_record` 使用技能：Supabase
 
 ## 知识库
 - 数据集名称: `charging_station_kb`
@@ -48,6 +50,45 @@
     │                                    ↓
     └── 无语音（纯文字）→ 【意图识别】→ 判断问题类型
                             ↓
+                            ├── 使用指导/故障处理 → 【知识库问答】→ 【保存历史】→ 【保存记录】→ 回复用户（含评价提示）
+                            │
+                            ├── 投诉兜底 → 【信息收集】→ 【邮件发送】→ 【保存记录】→ 告知用户已收到
+                            │
+                            └── 评价反馈（1/2）→ 【评价处理】→ 【保存记录】→ 回复用户
+```
+
+## 数据库表
+
+### conversation_history（对话历史表）
+用于多轮对话上下文，存储最近的对话记录。
+
+```sql
+CREATE TABLE conversation_history (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(128) NOT NULL,
+    user_message TEXT NOT NULL,
+    reply_content TEXT NOT NULL,
+    intent VARCHAR(50),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### dialog_records（对话记录表）
+用于保存所有对话和评价记录，用于后续分析。
+
+```sql
+CREATE TABLE dialog_records (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(128),
+    user_message TEXT NOT NULL,
+    reply_content TEXT NOT NULL,
+    intent VARCHAR(50),
+    feedback_type VARCHAR(20),
+    knowledge_matched BOOLEAN DEFAULT FALSE,
+    knowledge_chunks JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
                             ├── 使用指导/故障处理 → 【知识库问答】→ 【保存历史】→ 回复用户（含评价提示）
                             │
                             ├── 投诉兜底 → 【信息收集】→ 【邮件发送】→ 告知用户已收到

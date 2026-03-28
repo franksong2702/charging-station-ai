@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入，支持评价机制，支持多轮对话
+支持文字和语音输入，支持评价机制，支持多轮对话，支持对话记录保存
 """
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
@@ -18,7 +18,8 @@ from graphs.state import (
     InfoCollectionInput,
     EmailSendingInput,
     LoadHistoryInput,
-    SaveHistoryInput
+    SaveHistoryInput,
+    SaveRecordInput
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -30,6 +31,7 @@ from graphs.nodes.info_collection_node import info_collection_node
 from graphs.nodes.email_sending_node import email_sending_node
 from graphs.nodes.load_history_node import load_history_node
 from graphs.nodes.save_history_node import save_history_node
+from graphs.nodes.save_record_node import save_record_node
 
 
 # ==================== 条件判断函数 ====================
@@ -161,6 +163,14 @@ builder.add_node(
     }
 )
 
+builder.add_node(
+    "save_record",
+    save_record_node,
+    metadata={
+        "type": "task"
+    }
+)
+
 # 设置入口点：先判断是否需要加载历史
 builder.set_entry_point("load_history")
 
@@ -192,16 +202,17 @@ builder.add_conditional_edges(
     }
 )
 
-# 知识库问答后保存历史
+# 知识库问答后保存历史，再保存记录
 builder.add_edge("knowledge_qa", "save_history")
-builder.add_edge("save_history", END)
+builder.add_edge("save_history", "save_record")
+builder.add_edge("save_record", END)
 
-# 评价反馈后直接结束
-builder.add_edge("feedback", END)
+# 评价反馈后保存记录
+builder.add_edge("feedback", "save_record")
 
 # 投诉处理流程
 builder.add_edge("info_collection", "email_sending")
-builder.add_edge("email_sending", END)
+builder.add_edge("email_sending", "save_record")
 
 # 编译图
 main_graph = builder.compile()

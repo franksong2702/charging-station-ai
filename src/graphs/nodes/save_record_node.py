@@ -1,23 +1,20 @@
 """
-对话记录保存节点 - 将对话记录保存到JSON文件
+对话记录保存节点 - 将对话记录保存到Supabase数据库
 """
-import os
 import json
 import logging
-from datetime import datetime
 from typing import List, Dict, Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
+from postgrest.exceptions import APIError
 
 from graphs.state import SaveRecordInput, SaveRecordOutput
+from storage.database.supabase_client import get_supabase_client
 
 # 配置日志
 logger = logging.getLogger(__name__)
-
-# 记录文件路径
-RECORD_FILE = "assets/dialog_records.json"
 
 
 def save_record_node(
@@ -27,53 +24,38 @@ def save_record_node(
 ) -> SaveRecordOutput:
     """
     title: 对话记录保存
-    desc: 将对话记录保存到JSON文件，用于后续分析
-    integrations: 无
+    desc: 将对话记录保存到数据库，用于后续分析
+    integrations: Supabase
     """
     ctx = runtime.context
     
     # 构建记录对象
-    record = {
-        "timestamp": datetime.now().isoformat(),
-        "user_message": state.user_message,
-        "reply_content": state.reply_content,
-        "intent": state.intent,
-        "feedback_type": state.feedback_type,
-        "knowledge_matched": len(state.knowledge_chunks) > 0,
-        "knowledge_chunks": [
-            {"content": chunk.get("content", "")[:100], "score": chunk.get("score", 0)}
-            for chunk in state.knowledge_chunks[:3]  # 只保存前3条
-        ]
-    }
+    knowledge_matched = len(state.knowledge_chunks) > 0
+    knowledge_chunks_summary = [
+        {"content": chunk.get("content", "")[:100], "score": chunk.get("score", 0)}
+        for chunk in state.knowledge_chunks[:3]  # 只保存前3条
+    ]
     
-    # 确保目录存在
-    record_dir = os.path.join(os.getenv("COZE_WORKSPACE_PATH", ""), "assets")
-    os.makedirs(record_dir, exist_ok=True)
-    
-    record_file = os.path.join(record_dir, "dialog_records.json")
-    
-    # 读取现有记录
-    records = []
-    if os.path.exists(record_file):
-        try:
-            with open(record_file, 'r', encoding='utf-8') as f:
-                records = json.load(f)
-                if not isinstance(records, list):
-                    records = []
-        except Exception as e:
-            logger.warning(f"读取记录文件失败: {e}")
-            records = []
-    
-    # 追加新记录
-    records.append(record)
-    
-    # 保存文件
     try:
-        with open(record_file, 'w', encoding='utf-8') as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
-        logger.info(f"对话记录已保存，总记录数: {len(records)}")
-    except Exception as e:
-        logger.error(f"保存记录文件失败: {e}")
+        client = get_supabase_client()
+        
+        # 插入对话记录
+        client.table("dialog_records").insert({
+            "user_id": state.user_id if state.user_id else None,
+            "user_message": state.user_message,
+            "reply_content": state.reply_content,
+            "intent": state.intent if state.intent else None,
+            "feedback_type": state.feedback_type if state.feedback_type else None,
+            "knowledge_matched": knowledge_matched,
+            "knowledge_chunks": knowledge_chunks_summary if knowledge_chunks_summary else None
+        }).execute()
+        
+        logger.info(f"对话记录已保存到数据库")
+        return SaveRecordOutput(saved=True)
+        
+    except APIError as e:
+        logger.error(f"保存记录到数据库失败: {e.message}")
         return SaveRecordOutput(saved=False)
-    
-    return SaveRecordOutput(saved=True)
+    except Exception as e:
+        logger.error(f"保存记录失败: {str(e)}")
+        return SaveRecordOutput(saved=False)
