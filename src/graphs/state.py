@@ -151,7 +151,7 @@ class EmailSendingOutput(BaseModel):
 
 class LoadHistoryInput(BaseModel):
     """加载对话历史节点的输入"""
-    user_id: str = Field(..., description="用户身份标识")
+    user_id: str = Field(default="", description="用户身份标识（可选）")
 
 
 class LoadHistoryOutput(BaseModel):
@@ -163,9 +163,9 @@ class LoadHistoryOutput(BaseModel):
 
 class SaveHistoryInput(BaseModel):
     """保存对话历史节点的输入"""
-    user_id: str = Field(..., description="用户身份标识")
-    user_message: str = Field(..., description="用户发送的消息")
-    reply_content: str = Field(..., description="AI回复内容")
+    user_id: str = Field(default="", description="用户身份标识（可选）")
+    user_message: str = Field(default="", description="用户发送的消息")
+    reply_content: str = Field(default="", description="AI回复内容")
     intent: str = Field(default="", description="意图类型")
 
 
