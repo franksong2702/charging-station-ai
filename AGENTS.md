@@ -89,30 +89,12 @@ CREATE TABLE dialog_records (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
-                            ├── 使用指导/故障处理 → 【知识库问答】→ 【保存历史】→ 回复用户（含评价提示）
-                            │
-                            ├── 投诉兜底 → 【信息收集】→ 【邮件发送】→ 告知用户已收到
-                            │
-                            └── 评价反馈（1/2）→ 【评价处理】→ 回复用户
-```
 
 ## 多轮对话
 - **存储方式**: Supabase 数据库
 - **表名**: conversation_history
 - **最大历史轮数**: 10 轮
 - **兼容性**: 无 user_id 时正常工作（单轮对话）
-
-### 对话历史表结构
-```sql
-CREATE TABLE conversation_history (
-    id SERIAL PRIMARY KEY,
-    user_id VARCHAR(128) NOT NULL,
-    user_message TEXT NOT NULL,
-    reply_content TEXT NOT NULL,
-    intent VARCHAR(50),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
 
 ## 评价机制
 - 触发场景：知识库问答后
