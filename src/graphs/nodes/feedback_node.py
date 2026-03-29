@@ -34,7 +34,7 @@ def feedback_node(
         reply_content = "感谢您的反馈！我们会继续努力为您提供更好的服务 😊"
     elif user_message in ["2", "２", "【2】", "【２】", "没有帮助", "不满意", "没用"]:
         feedback_type = "bad"
-        reply_content = "感谢您的反馈！很抱歉没能帮到您。您可以详细描述一下遇到的问题，或者回复「人工客服」联系人工处理。"
+        reply_content = "感谢您的反馈！很抱歉没能帮到您。您能再详细描述一下遇到的问题吗？我再尝试帮您解决。"
     else:
         feedback_type = "unknown"
         reply_content = "感谢您的反馈！"
