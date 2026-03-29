@@ -14,14 +14,22 @@ class GlobalState(BaseModel):
     user_message: str = Field(default="", description="用户发送的消息（文字或语音转写后的文字）")
     voice_url: str = Field(default="", description="用户发送的语音URL（可选）")
     user_id: str = Field(default="", description="用户身份标识（企业微信 external_userid，用于多轮对话）")
-    intent: str = Field(default="", description="识别的意图类型：usage_guidance(使用指导), fault_handling(故障处理), complaint(投诉兜底), feedback(评价反馈)")
+    intent: str = Field(default="", description="识别的意图类型")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
-    user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（手机号、订单号、问题描述等）")
+    user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（手机号、车牌号等）")
     reply_content: str = Field(default="", description="回复给用户的内容")
     email_sent: bool = Field(default=False, description="邮件是否已发送")
     feedback_type: str = Field(default="", description="评价类型：good(很好), bad(没有帮助)")
     need_feedback: bool = Field(default=False, description="是否需要请求用户评价")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录（用于多轮对话上下文）")
+    # 兜底流程相关
+    fallback_phase: str = Field(default="", description="兜底流程阶段：collect_info/summarize/confirm/send")
+    phone: str = Field(default="", description="用户手机号")
+    license_plate: str = Field(default="", description="用户车牌号")
+    problem_summary: str = Field(default="", description="问题总结（AI生成）")
+    user_supplement: str = Field(default="", description="用户补充内容")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+    case_created: bool = Field(default=False, description="工单是否已创建")
 
 
 # ==================== 图的输入输出 ====================
@@ -31,6 +39,12 @@ class GraphInput(BaseModel):
     user_message: str = Field(default="", description="用户发送的文字消息")
     voice_url: str = Field(default="", description="用户发送的语音URL（可选，如来自微信语音消息）")
     user_id: str = Field(default="", description="用户身份标识（企业微信 external_userid，可选，用于多轮对话）")
+    # 兜底流程状态（用于多轮对话）
+    fallback_phase: str = Field(default="", description="兜底流程阶段（可选）")
+    phone: str = Field(default="", description="已收集的手机号（可选）")
+    license_plate: str = Field(default="", description="已收集的车牌号（可选）")
+    problem_summary: str = Field(default="", description="已生成的问题总结（可选）")
+    user_supplement: str = Field(default="", description="用户补充内容（可选）")
 
 
 class GraphOutput(BaseModel):
@@ -68,6 +82,7 @@ class ASROutput(BaseModel):
 class IntentRecognitionInput(BaseModel):
     """意图识别节点的输入"""
     user_message: str = Field(..., description="用户发送的消息")
+    fallback_phase: str = Field(default="", description="兜底流程阶段（非空表示正在兜底流程中）")
 
 
 class IntentRecognitionOutput(BaseModel):
@@ -139,8 +154,13 @@ class InfoCollectionOutput(BaseModel):
 
 class EmailSendingInput(BaseModel):
     """邮件发送节点的输入"""
-    user_info: Dict[str, str] = Field(..., description="收集的用户信息")
-    user_message: str = Field(..., description="用户原始消息")
+    user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（旧格式，兼容）")
+    user_message: str = Field(default="", description="用户原始消息")
+    # 新增字段：兜底流程数据
+    phone: str = Field(default="", description="用户手机号")
+    license_plate: str = Field(default="", description="用户车牌号")
+    problem_summary: str = Field(default="", description="问题总结")
+    case_id: str = Field(default="", description="工单ID")
 
 
 class EmailSendingOutput(BaseModel):
@@ -179,11 +199,53 @@ class SaveHistoryOutput(BaseModel):
 # ==================== 不满意处理节点 ====================
 
 class DissatisfiedInput(BaseModel):
-    """不满意处理节点的输入"""
+    """不满意处理节点的输入（轻度不满）"""
     user_message: str = Field(..., description="用户发送的消息")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
 
 
 class DissatisfiedOutput(BaseModel):
-    """不满意处理节点的输出"""
+    """不满意处理节点的输出（轻度不满）"""
     reply_content: str = Field(..., description="回复内容")
     dissatisfied_logged: bool = Field(default=True, description="是否已记录不满意")
+
+
+# ==================== 兜底流程节点 ====================
+
+class FallbackInput(BaseModel):
+    """兜底流程节点的输入"""
+    user_message: str = Field(..., description="用户发送的消息")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
+    fallback_phase: str = Field(default="collect_info", description="当前阶段")
+    phone: str = Field(default="", description="已收集的手机号")
+    license_plate: str = Field(default="", description="已收集的车牌号")
+    problem_summary: str = Field(default="", description="已生成的问题总结")
+    user_supplement: str = Field(default="", description="用户补充内容")
+
+
+class FallbackOutput(BaseModel):
+    """兜底流程节点的输出"""
+    reply_content: str = Field(..., description="回复内容")
+    fallback_phase: str = Field(..., description="下一阶段")
+    phone: str = Field(default="", description="收集的手机号")
+    license_plate: str = Field(default="", description="收集的车牌号")
+    problem_summary: str = Field(default="", description="问题总结")
+    user_supplement: str = Field(default="", description="用户补充内容")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认")
+
+
+# ==================== 创建工单节点 ====================
+
+class CreateCaseInput(BaseModel):
+    """创建工单节点的输入"""
+    user_id: str = Field(default="", description="用户身份标识")
+    phone: str = Field(..., description="用户手机号")
+    license_plate: str = Field(default="", description="用户车牌号")
+    problem_summary: str = Field(..., description="问题总结")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话上下文")
+
+
+class CreateCaseOutput(BaseModel):
+    """创建工单节点的输出"""
+    case_created: bool = Field(default=True, description="工单是否创建成功")
+    case_id: str = Field(default="", description="工单ID")

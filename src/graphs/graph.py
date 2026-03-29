@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入，支持评价机制，支持多轮对话，支持对话记录保存
+支持文字和语音输入，支持评价机制，支持多轮对话，支持兜底流程和工单创建
 """
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnableConfig
@@ -20,7 +20,9 @@ from graphs.state import (
     LoadHistoryInput,
     SaveHistoryInput,
     SaveRecordInput,
-    DissatisfiedInput
+    DissatisfiedInput,
+    FallbackInput,
+    CreateCaseInput
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -35,6 +37,8 @@ from graphs.nodes.save_history_node import save_history_node
 from graphs.nodes.save_record_node import save_record_node
 from graphs.nodes.dissatisfied_node import dissatisfied_node
 from graphs.nodes.satisfied_node import satisfied_node
+from graphs.nodes.fallback_node import fallback_node
+from graphs.nodes.create_case_node import create_case_node
 
 
 # ==================== 条件判断函数 ====================
@@ -44,7 +48,6 @@ def route_by_voice_input(state: GlobalState) -> str:
     title: 语音输入判断
     desc: 判断是否有语音输入，决定是否需要 ASR 处理
     """
-    # 如果有语音 URL，走 ASR 处理
     if state.voice_url and state.voice_url.strip():
         return "语音处理"
     else:
@@ -63,13 +66,16 @@ def route_by_intent(state: GlobalState) -> str:
     elif intent == "fault_handling":
         return "故障处理"
     elif intent == "complaint":
-        return "投诉兜底"
-    elif intent == "transfer_human":
-        return "转人工"
+        # 投诉兜底 → 走兜底流程
+        return "兜底流程"
+    elif intent == "fallback":
+        # 强烈不满/转人工 → 走兜底流程
+        return "兜底流程"
     elif intent == "dissatisfied":
+        # 轻度不满 → AI 继续尝试帮助
         return "不满意"
     elif intent == "satisfied":
-        # 用户表达满意，触发评价请求
+        # 用户表达满意 → 感谢并请求评价
         return "满意"
     elif intent == "feedback_good":
         return "评价反馈"
@@ -78,6 +84,17 @@ def route_by_intent(state: GlobalState) -> str:
     else:
         # 默认走知识库问答
         return "使用指导"
+
+
+def route_by_case_confirmed(state: GlobalState) -> str:
+    """
+    title: 工单确认判断
+    desc: 判断用户是否已确认问题总结，决定是否创建工单
+    """
+    if state.case_confirmed:
+        return "创建工单"
+    else:
+        return "继续兜底"
 
 
 def route_by_user_id(state: GlobalState) -> str:
@@ -100,28 +117,26 @@ builder = StateGraph(
     output_schema=GraphOutput
 )
 
-# 添加节点
+# ==================== 添加节点 ====================
+
+# 加载对话历史
 builder.add_node(
     "load_history",
     load_history_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
-builder.add_node(
-    "input_process",
-    input_process_node
-)
+# 输入预处理
+builder.add_node("input_process", input_process_node)
 
+# ASR 语音转文字
 builder.add_node(
     "asr",
     asr_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 意图识别
 builder.add_node(
     "intent_recognition",
     intent_recognition_node,
@@ -131,6 +146,7 @@ builder.add_node(
     }
 )
 
+# 知识库问答
 builder.add_node(
     "knowledge_qa",
     knowledge_qa_node,
@@ -140,14 +156,14 @@ builder.add_node(
     }
 )
 
+# 评价反馈处理
 builder.add_node(
     "feedback",
     feedback_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 投诉信息收集（保留，用于投诉兜底场景）
 builder.add_node(
     "info_collection",
     info_collection_node,
@@ -157,53 +173,65 @@ builder.add_node(
     }
 )
 
+# 邮件发送
 builder.add_node(
     "email_sending",
     email_sending_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 保存对话历史
 builder.add_node(
     "save_history",
     save_history_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 保存对话记录
 builder.add_node(
     "save_record",
     save_record_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 轻度不满处理
 builder.add_node(
     "dissatisfied",
     dissatisfied_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
+# 满意处理
 builder.add_node(
     "satisfied",
     satisfied_node,
-    metadata={
-        "type": "task"
-    }
+    metadata={"type": "task"}
 )
 
-# 设置入口点：先判断是否需要加载历史
+# 兜底流程（新增）
+builder.add_node(
+    "fallback",
+    fallback_node,
+    metadata={"type": "task"}
+)
+
+# 创建工单（新增）
+builder.add_node(
+    "create_case",
+    create_case_node,
+    metadata={"type": "task"}
+)
+
+# ==================== 设置入口点 ====================
+
 builder.set_entry_point("load_history")
 
-# 加载历史后，进入输入处理
+# ==================== 添加边 ====================
+
+# 加载历史 → 输入处理
 builder.add_edge("load_history", "input_process")
 
-# 添加条件分支：判断是否有语音输入
+# 语音输入判断
 builder.add_conditional_edges(
     source="input_process",
     path=route_by_voice_input,
@@ -213,41 +241,57 @@ builder.add_conditional_edges(
     }
 )
 
-# ASR 处理后，进入意图识别
+# ASR → 意图识别
 builder.add_edge("asr", "intent_recognition")
 
-# 添加意图分支
+# 意图路由
 builder.add_conditional_edges(
     source="intent_recognition",
     path=route_by_intent,
     path_map={
         "使用指导": "knowledge_qa",
         "故障处理": "knowledge_qa",
-        "投诉兜底": "info_collection",
-        "转人工": "info_collection",  # 转人工也走信息收集流程
+        "兜底流程": "fallback",
         "不满意": "dissatisfied",
-        "满意": "satisfied",  # 用户满意时触发评价
+        "满意": "satisfied",
         "评价反馈": "feedback"
     }
 )
 
-# 知识库问答后保存历史，再保存记录
+# 知识库问答 → 保存历史 → 保存记录
 builder.add_edge("knowledge_qa", "save_history")
 builder.add_edge("save_history", "save_record")
 builder.add_edge("save_record", END)
 
-# 评价反馈后保存记录
+# 评价反馈 → 保存记录
 builder.add_edge("feedback", "save_record")
 
-# 不满意处理后保存记录
+# 轻度不满 → 保存记录
 builder.add_edge("dissatisfied", "save_record")
 
-# 满意处理后保存记录
+# 满意 → 保存记录
 builder.add_edge("satisfied", "save_record")
 
-# 投诉处理流程
-builder.add_edge("info_collection", "email_sending")
-builder.add_edge("email_sending", "save_record")
+# 兜底流程判断
+builder.add_conditional_edges(
+    source="fallback",
+    path=route_by_case_confirmed,
+    path_map={
+        "创建工单": "create_case",
+        "继续兜底": END  # 用户还需要继续输入信息
+    }
+)
 
-# 编译图
+# 创建工单 → 邮件发送
+builder.add_edge("create_case", "email_sending")
+
+# 邮件发送 → 结束
+builder.add_edge("email_sending", END)
+
+# 投诉兜底流程（保留旧流程兼容）
+# complaint 意图走 info_collection → email_sending
+builder.add_edge("info_collection", "email_sending")
+
+# ==================== 编译图 ====================
+
 main_graph = builder.compile()

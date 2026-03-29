@@ -125,16 +125,20 @@ def email_sending_node(
 ) -> EmailSendingOutput:
     """
     title: 邮件发送
-    desc: 将用户投诉信息发送到客服邮箱
+    desc: 将用户问题信息发送到客服邮箱（支持兜底流程和投诉场景）
     integrations: 邮件
     """
     # 获取上下文
     ctx = runtime.context
     
+    # 优先使用新字段（兜底流程），兼容旧字段（投诉场景）
+    phone = state.phone or state.user_info.get("phone", "未知")
+    license_plate = state.license_plate or state.user_info.get("license_plate", "无")
+    problem_summary = state.problem_summary or state.user_info.get("description", "")
+    case_id = state.case_id or "无"
+    
     # 构建邮件主题
-    phone = state.user_info.get("phone", "未知")
-    order_id = state.user_info.get("order_id", "无")
-    subject = f"【充电桩客服】用户投诉 - 手机号:{phone} 订单号:{order_id}"
+    subject = f"【充电桩客服】用户问题反馈 - 工单:{case_id} 手机:{phone}"
     
     # 构建邮件正文（HTML格式）
     html_content = f"""
@@ -148,26 +152,31 @@ def email_sending_node(
             .field {{ margin-bottom: 15px; }}
             .label {{ font-weight: bold; color: #333; }}
             .value {{ color: #666; }}
+            .summary {{ margin-top: 10px; padding: 15px; background-color: #e8f5e9; border-left: 4px solid #4CAF50; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h2>充电桩用户投诉信息</h2>
+                <h2>充电桩用户问题反馈</h2>
             </div>
             <div class="content">
+                <div class="field">
+                    <span class="label">📋 工单编号：</span>
+                    <span class="value">{case_id}</span>
+                </div>
                 <div class="field">
                     <span class="label">📱 手机号：</span>
                     <span class="value">{phone}</span>
                 </div>
                 <div class="field">
-                    <span class="label">📋 订单号：</span>
-                    <span class="value">{order_id}</span>
+                    <span class="label">🚗 车牌号：</span>
+                    <span class="value">{license_plate}</span>
                 </div>
                 <div class="field">
-                    <span class="label">📝 问题描述：</span>
-                    <div class="value" style="margin-top: 10px; padding: 10px; background-color: #f0f0f0; border-left: 4px solid #4CAF50;">
-                        {state.user_info.get("description", state.user_message)}
+                    <span class="label">📝 问题总结：</span>
+                    <div class="value summary">
+                        {problem_summary if problem_summary else state.user_message}
                     </div>
                 </div>
                 <div class="field">
@@ -176,6 +185,9 @@ def email_sending_node(
                         {state.user_message}
                     </div>
                 </div>
+            </div>
+            <div style="text-align: center; padding: 10px; color: #999; font-size: 12px;">
+                此邮件由充电桩智能客服系统自动发送 | 时间：{formatdate(localtime=True)}
             </div>
         </div>
     </body>
@@ -194,7 +206,11 @@ def email_sending_node(
     
     # 生成回复
     if email_sent:
-        reply_content = "✅ 您的投诉信息已成功提交！\n\n我们的客服人员会在1个工作日内联系您，请保持电话畅通。"
+        reply_content = f"""✅ 您的问题已成功提交！
+
+📋 工单编号：{case_id}
+
+我们的工作人员会在24小时内联系您处理，请保持电话畅通。"""
     else:
         reply_content = f"⚠️ 信息提交失败：{result.get('message', '未知错误')}\n\n请直接联系客服电话：400-XXX-XXXX"
     
