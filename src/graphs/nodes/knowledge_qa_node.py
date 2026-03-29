@@ -205,28 +205,56 @@ def knowledge_qa_node(
                 text_parts.append(item.get("text", ""))
             elif isinstance(item, str):
                 text_parts.append(item)
-        reply_content = " ".join(text_parts).strip()
+        raw_content = " ".join(text_parts).strip()
     else:
-        reply_content = str(content).strip()
+        raw_content = str(content).strip()
     
-    # 添加评价提示（只针对知识库问答场景）
-    # 防御性检查：如果 LLM 已经添加了评价提示，不再重复添加
-    feedback_prompt = """
+    # 解析 JSON 格式的回复
+    reply_content = ""
+    should_ask_feedback = False
+    
+    # 尝试解析 JSON
+    try:
+        # 清理可能的 markdown 代码块标记
+        json_str = raw_content.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        json_str = json_str.strip()
+        
+        result = json.loads(json_str)
+        if isinstance(result, dict):
+            reply_content = result.get("reply_content", "")
+            should_ask_feedback = result.get("should_ask_feedback", False)
+            logger.info(f"LLM 判断是否请求评价: {should_ask_feedback}")
+        else:
+            reply_content = raw_content
+            should_ask_feedback = False
+    except json.JSONDecodeError:
+        # JSON 解析失败，直接使用原始内容
+        logger.warning(f"JSON 解析失败，使用原始回复: {raw_content[:100]}...")
+        reply_content = raw_content
+        should_ask_feedback = False
+    
+    # 如果 LLM 判断应该请求评价，添加评价提示
+    if should_ask_feedback:
+        feedback_prompt = """
 
 ───────────
 您对本次回答满意吗？
 回复【1】很好
 回复【2】没有帮助"""
-    
-    # 检查是否已包含评价提示
-    if "您对本次回答满意吗" in reply_content or "回复【1】" in reply_content:
-        logger.warning("LLM 回复已包含评价提示，不再重复添加")
-        reply_content_with_feedback = reply_content
-    else:
         reply_content_with_feedback = reply_content + feedback_prompt
+        logger.info("已添加评价提示")
+    else:
+        reply_content_with_feedback = reply_content
+        logger.info("不添加评价提示（LLM 判断不需要）")
     
     return KnowledgeQAOutput(
         reply_content=reply_content_with_feedback,
         knowledge_chunks=knowledge_chunks,
-        need_feedback=True
+        need_feedback=should_ask_feedback
     )

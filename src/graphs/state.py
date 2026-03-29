@@ -88,7 +88,7 @@ class KnowledgeQAOutput(BaseModel):
     """知识库问答节点的输出"""
     reply_content: str = Field(..., description="回复给用户的内容")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
-    need_feedback: bool = Field(default=True, description="是否需要请求用户评价")
+    need_feedback: bool = Field(default=False, description="是否需要请求用户评价（由LLM智能判断）")
 
 
 # ==================== 评价反馈节点 ====================
