@@ -20,7 +20,7 @@ def dissatisfied_node(
 ) -> DissatisfiedOutput:
     """
     title: 不满意处理
-    desc: 用户表达不满时，询问是否需要转人工或重新描述问题
+    desc: 用户表达不满时，请求用户详细描述问题，再次尝试帮助
     integrations: 无
     """
     ctx = runtime.context
@@ -29,14 +29,10 @@ def dissatisfied_node(
     
     logger.info(f"用户表达不满: {user_message}")
     
-    # 构建回复：表达理解 + 提供选择
+    # 构建回复：先道歉，再请求详细描述问题
     reply_content = """很抱歉没能帮到您 😔
 
-您可以：
-1. 详细描述一下您遇到的问题，我再尝试帮您解决
-2. 回复「转人工」联系人工客服
-
-请问您希望怎么处理呢？"""
+您能再详细描述一下遇到的问题吗？我再尝试帮您解决。"""
     
     return DissatisfiedOutput(
         reply_content=reply_content,
