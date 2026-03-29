@@ -57,6 +57,12 @@ def intent_recognition_node(
         if keyword in user_message:
             return IntentRecognitionOutput(intent="dissatisfied")
     
+    # 4. 满意（用户表达感谢）
+    satisfied_keywords = ["谢谢", "感谢", "好的好的", "好的 谢谢", "谢谢你", "多谢", "谢谢啦"]
+    for keyword in satisfied_keywords:
+        if keyword in user_message:
+            return IntentRecognitionOutput(intent="satisfied")
+    
     # ==================== 调用 LLM 判断复杂意图 ====================
     
     # 读取配置文件
@@ -119,5 +125,7 @@ def intent_recognition_node(
         intent = "transfer_human"
     elif "不满意" in intent_text:
         intent = "dissatisfied"
+    elif "满意" in intent_text:
+        intent = "satisfied"
     
     return IntentRecognitionOutput(intent=intent)

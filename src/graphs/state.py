@@ -114,6 +114,7 @@ class SaveRecordInput(BaseModel):
     intent: str = Field(default="", description="意图类型")
     feedback_type: str = Field(default="", description="评价类型")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史（用于评价时保存完整上下文）")
 
 
 class SaveRecordOutput(BaseModel):

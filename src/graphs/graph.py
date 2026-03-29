@@ -34,6 +34,7 @@ from graphs.nodes.load_history_node import load_history_node
 from graphs.nodes.save_history_node import save_history_node
 from graphs.nodes.save_record_node import save_record_node
 from graphs.nodes.dissatisfied_node import dissatisfied_node
+from graphs.nodes.satisfied_node import satisfied_node
 
 
 # ==================== 条件判断函数 ====================
@@ -67,6 +68,9 @@ def route_by_intent(state: GlobalState) -> str:
         return "转人工"
     elif intent == "dissatisfied":
         return "不满意"
+    elif intent == "satisfied":
+        # 用户表达满意，触发评价请求
+        return "满意"
     elif intent == "feedback_good":
         return "评价反馈"
     elif intent == "feedback_bad":
@@ -185,6 +189,14 @@ builder.add_node(
     }
 )
 
+builder.add_node(
+    "satisfied",
+    satisfied_node,
+    metadata={
+        "type": "task"
+    }
+)
+
 # 设置入口点：先判断是否需要加载历史
 builder.set_entry_point("load_history")
 
@@ -214,6 +226,7 @@ builder.add_conditional_edges(
         "投诉兜底": "info_collection",
         "转人工": "info_collection",  # 转人工也走信息收集流程
         "不满意": "dissatisfied",
+        "满意": "satisfied",  # 用户满意时触发评价
         "评价反馈": "feedback"
     }
 )
@@ -228,6 +241,9 @@ builder.add_edge("feedback", "save_record")
 
 # 不满意处理后保存记录
 builder.add_edge("dissatisfied", "save_record")
+
+# 满意处理后保存记录
+builder.add_edge("satisfied", "save_record")
 
 # 投诉处理流程
 builder.add_edge("info_collection", "email_sending")

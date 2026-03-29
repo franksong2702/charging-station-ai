@@ -9,13 +9,14 @@
 | input_process | `nodes/input_process_node.py` | task | 判断输入类型（文字/语音） | - | - |
 | route_by_voice_input | `graph.py` | condition | 根据是否有语音URL决定分支 | "语音处理"→asr, "直接处理文字"→intent_recognition | - |
 | asr | `nodes/asr_node.py` | task | 语音转文字（ASR） | - | - |
-| intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（6种意图） | - | `config/intent_recognition_llm_cfg.json` |
+| intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（7种意图） | - | `config/intent_recognition_llm_cfg.json` |
 | route_by_intent | `graph.py` | condition | 根据意图路由到不同处理流程 | 见下方路由表 | - |
 | knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 搜索知识库并生成回复（智能评价触发） | - | `config/knowledge_qa_llm_cfg.json` |
 | save_history | `nodes/save_history_node.py` | task | 保存对话历史到数据库（用于多轮对话） | - | - |
-| save_record | `nodes/save_record_node.py` | task | 保存对话记录到数据库（用于分析） | - | - |
+| save_record | `nodes/save_record_node.py` | task | 保存对话记录到数据库（含评价上下文） | - | - |
 | feedback | `nodes/feedback_node.py` | task | 处理用户评价反馈（很好/没有帮助） | - | - |
-| dissatisfied | `nodes/dissatisfied_node.py` | task | 处理用户不满，提供选择（重新描述/转人工） | - | - |
+| dissatisfied | `nodes/dissatisfied_node.py` | task | 处理用户不满，请求详细描述问题 | - | - |
+| satisfied | `nodes/satisfied_node.py` | task | 用户表达满意时，感谢用户并请求评价 | - | - |
 | info_collection | `nodes/info_collection_node.py` | agent | 提取用户信息（手机号、订单号、问题描述） | - | `config/info_collection_llm_cfg.json` |
 | email_sending | `nodes/email_sending_node.py` | task | 发送信息到客服邮箱 | - | - |
 
@@ -28,7 +29,8 @@
 | fault_handling | knowledge_qa | 故障处理 → 知识库问答 |
 | complaint | info_collection | 投诉兜底 → 信息收集 → 邮件发送 |
 | transfer_human | info_collection | 转人工 → 信息收集 → 邮件发送 |
-| dissatisfied | dissatisfied | 不满意 → 友好询问 |
+| dissatisfied | dissatisfied | 不满意 → 请求详细描述 |
+| satisfied | satisfied | 满意 → 感谢用户并请求评价 |
 | feedback_good | feedback | 评价好 → 记录感谢 |
 | feedback_bad | feedback | 评价差 → 记录引导 |
 
@@ -72,17 +74,17 @@
 ```
 
 ## 智能评价触发
-评价触发由 LLM 智能判断，规则如下：
+评价触发由意图识别节点判断，规则如下：
 
 ### 触发评价
-- 提供了完整的解决方案或操作指导
-- 用户表示感谢（"谢谢"、"好的"、"明白了"等）
-- 问题已经得到解答
+- **用户表达满意**：说"谢谢"、"感谢"、"好的好的"等感谢词
+- **知识库问答后**：LLM 判断回答完整且有帮助时，在回复末尾添加评价提示
 
 ### 不触发评价
 - 用户明确表示不满（"没用"、"不行"、"太差了"等）
 - 用户要求转人工客服
 - 用户在投诉或抱怨
+- 第一次回答（避免过于频繁请求评价）
 
 ## 数据库表
 
