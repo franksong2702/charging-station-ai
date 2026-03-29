@@ -210,6 +210,7 @@ def knowledge_qa_node(
         reply_content = str(content).strip()
     
     # 添加评价提示（只针对知识库问答场景）
+    # 防御性检查：如果 LLM 已经添加了评价提示，不再重复添加
     feedback_prompt = """
 
 ───────────
@@ -217,7 +218,12 @@ def knowledge_qa_node(
 回复【1】很好
 回复【2】没有帮助"""
     
-    reply_content_with_feedback = reply_content + feedback_prompt
+    # 检查是否已包含评价提示
+    if "您对本次回答满意吗" in reply_content or "回复【1】" in reply_content:
+        logger.warning("LLM 回复已包含评价提示，不再重复添加")
+        reply_content_with_feedback = reply_content
+    else:
+        reply_content_with_feedback = reply_content + feedback_prompt
     
     return KnowledgeQAOutput(
         reply_content=reply_content_with_feedback,
