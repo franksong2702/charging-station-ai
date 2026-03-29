@@ -173,3 +173,16 @@ class SaveHistoryInput(BaseModel):
 class SaveHistoryOutput(BaseModel):
     """保存对话历史节点的输出"""
     saved: bool = Field(default=True, description="是否保存成功")
+
+
+# ==================== 不满意处理节点 ====================
+
+class DissatisfiedInput(BaseModel):
+    """不满意处理节点的输入"""
+    user_message: str = Field(..., description="用户发送的消息")
+
+
+class DissatisfiedOutput(BaseModel):
+    """不满意处理节点的输出"""
+    reply_content: str = Field(..., description="回复内容")
+    dissatisfied_logged: bool = Field(default=True, description="是否已记录不满意")

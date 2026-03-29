@@ -1,6 +1,6 @@
 ## 项目概述
 - **名称**: 充电桩智能客服工作流
-- **功能**: 为充电桩小程序提供智能客服服务，支持文字和语音输入，支持评价机制、多轮对话和对话记录保存
+- **功能**: 为充电桩小程序提供智能客服服务，支持文字和语音输入，支持智能评价触发、多轮对话、转人工和对话记录保存
 
 ### 节点清单
 | 节点名 | 文件位置 | 类型 | 功能描述 | 分支逻辑 | 配置文件 |
@@ -9,16 +9,28 @@
 | input_process | `nodes/input_process_node.py` | task | 判断输入类型（文字/语音） | - | - |
 | route_by_voice_input | `graph.py` | condition | 根据是否有语音URL决定分支 | "语音处理"→asr, "直接处理文字"→intent_recognition | - |
 | asr | `nodes/asr_node.py` | task | 语音转文字（ASR） | - | - |
-| intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（使用指导/故障处理/投诉兜底/评价反馈） | - | `config/intent_recognition_llm_cfg.json` |
-| route_by_intent | `graph.py` | condition | 根据意图路由到不同处理流程 | "使用指导"→knowledge_qa, "故障处理"→knowledge_qa, "投诉兜底"→info_collection, "评价反馈"→feedback | - |
-| knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 搜索知识库并生成回复（含评价提示） | - | `config/knowledge_qa_llm_cfg.json` |
+| intent_recognition | `nodes/intent_recognition_node.py` | agent | 识别用户问题类型（6种意图） | - | `config/intent_recognition_llm_cfg.json` |
+| route_by_intent | `graph.py` | condition | 根据意图路由到不同处理流程 | 见下方路由表 | - |
+| knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 搜索知识库并生成回复（智能评价触发） | - | `config/knowledge_qa_llm_cfg.json` |
 | save_history | `nodes/save_history_node.py` | task | 保存对话历史到数据库（用于多轮对话） | - | - |
 | save_record | `nodes/save_record_node.py` | task | 保存对话记录到数据库（用于分析） | - | - |
 | feedback | `nodes/feedback_node.py` | task | 处理用户评价反馈（很好/没有帮助） | - | - |
-| info_collection | `nodes/info_collection_node.py` | agent | 提取用户投诉信息（手机号、订单号、问题描述） | - | `config/info_collection_llm_cfg.json` |
-| email_sending | `nodes/email_sending_node.py` | task | 发送投诉信息到客服邮箱 | - | - |
+| dissatisfied | `nodes/dissatisfied_node.py` | task | 处理用户不满，提供选择（重新描述/转人工） | - | - |
+| info_collection | `nodes/info_collection_node.py` | agent | 提取用户信息（手机号、订单号、问题描述） | - | `config/info_collection_llm_cfg.json` |
+| email_sending | `nodes/email_sending_node.py` | task | 发送信息到客服邮箱 | - | - |
 
 **类型说明**: task(task节点) / agent(大模型) / condition(条件分支) / looparray(列表循环) / loopcond(条件循环)
+
+### 意图路由表
+| 意图 | 路由目标 | 说明 |
+|-----|---------|------|
+| usage_guidance | knowledge_qa | 使用指导 → 知识库问答 |
+| fault_handling | knowledge_qa | 故障处理 → 知识库问答 |
+| complaint | info_collection | 投诉兜底 → 信息收集 → 邮件发送 |
+| transfer_human | info_collection | 转人工 → 信息收集 → 邮件发送 |
+| dissatisfied | dissatisfied | 不满意 → 友好询问 |
+| feedback_good | feedback | 评价好 → 记录感谢 |
+| feedback_bad | feedback | 评价差 → 记录引导 |
 
 ## 子图清单
 无子图
@@ -50,12 +62,27 @@
     │                                    ↓
     └── 无语音（纯文字）→ 【意图识别】→ 判断问题类型
                             ↓
-                            ├── 使用指导/故障处理 → 【知识库问答】→ 【保存历史】→ 【保存记录】→ 回复用户（含评价提示）
+                            ├── 使用指导/故障处理 → 【知识库问答】→ 智能判断是否触发评价 → 【保存历史】→ 【保存记录】
                             │
-                            ├── 投诉兜底 → 【信息收集】→ 【邮件发送】→ 【保存记录】→ 告知用户已收到
+                            ├── 投诉兜底/转人工 → 【信息收集】→ 【邮件发送】→ 【保存记录】→ 告知用户已收到
+                            │
+                            ├── 不满意 → 【友好询问】→ 提供选择（重新描述/转人工）
                             │
                             └── 评价反馈（1/2）→ 【评价处理】→ 【保存记录】→ 回复用户
 ```
+
+## 智能评价触发
+评价触发由 LLM 智能判断，规则如下：
+
+### 触发评价
+- 提供了完整的解决方案或操作指导
+- 用户表示感谢（"谢谢"、"好的"、"明白了"等）
+- 问题已经得到解答
+
+### 不触发评价
+- 用户明确表示不满（"没用"、"不行"、"太差了"等）
+- 用户要求转人工客服
+- 用户在投诉或抱怨
 
 ## 数据库表
 
@@ -97,7 +124,7 @@ CREATE TABLE dialog_records (
 - **兼容性**: 无 user_id 时正常工作（单轮对话）
 
 ## 评价机制
-- 触发场景：知识库问答后
+- 触发方式：LLM 智能判断
 - 评价选项：回复【1】很好 / 回复【2】没有帮助
 - 支持格式：半角数字(1/2)、全角数字(１/２)、带括号格式(【1】/【２】)
 - 记录保存：对话记录保存到 Supabase 数据库
@@ -121,12 +148,13 @@ CREATE TABLE dialog_records (
 ```
 
 ## 测试场景
-1. **文字输入 - 使用指导场景**: "我看到充电桩上有很多二维码，不知道应该扫哪一个？我是特斯拉的车。"
-2. **文字输入 - 故障处理场景**: "充电停不下来了，我点了停止按钮但是还在继续充电，怎么办？"
-3. **文字输入 - 投诉兜底场景**: "我刚才充电扣了50块钱，但是实际只充了20块钱的电，要求退款！我的手机号是13800138000，订单号是12345678"
-4. **语音输入场景**: 传入 voice_url 参数，ASR自动转文字后处理
-5. **评价反馈场景**: 用户回复 "1" 或 "2" 进行评价
-6. **多轮对话场景**: 传入 user_id 参数，AI会记住之前的对话上下文
+1. **文字输入 - 使用指导场景**: "充电桩怎么用？"
+2. **文字输入 - 故障处理场景**: "充电枪拔不出来怎么办？"
+3. **文字输入 - 投诉场景**: "我刚才充电扣了50块钱，但是实际只充了20块钱，要求退款！"
+4. **文字输入 - 转人工场景**: "我要转人工客服"
+5. **文字输入 - 不满意场景**: "这回答没用，太差了"
+6. **评价反馈场景**: 用户回复 "1" 或 "2" 进行评价
+7. **多轮对话场景**: 传入 user_id 参数，AI会记住之前的对话上下文
 
 ## 邮件配置说明
 邮件发送功能需要配置SMTP服务器信息。当前配置的收件邮箱为：`xuefu.song@qq.com`
@@ -140,5 +168,6 @@ CREATE TABLE dialog_records (
 - ✅ 文字输入：直接处理
 - ✅ 语音输入：ASR 转文字后处理
 - ✅ 多轮对话：通过 user_id 支持上下文
+- ✅ 智能评价：LLM 判断是否触发评价
 - ❌ 图片输入：暂不支持
 - ❌ 图片输出：暂不支持

@@ -1,5 +1,6 @@
 """
 意图识别节点 - 判断用户问题的类型
+支持：使用指导、故障处理、投诉兜底、转人工、不满意、评价反馈
 """
 import os
 import json
@@ -22,7 +23,7 @@ def intent_recognition_node(
 ) -> IntentRecognitionOutput:
     """
     title: 意图识别
-    desc: 分析用户消息，判断问题类型（使用指导/故障处理/投诉兜底/评价反馈）
+    desc: 分析用户消息，判断问题类型（使用指导/故障处理/投诉兜底/转人工/不满意/评价反馈）
     integrations: 大语言模型
     """
     # 获取上下文
@@ -30,17 +31,33 @@ def intent_recognition_node(
     
     user_message = state.user_message.strip()
     
-    # 优先判断是否为评价反馈
-    # 用户回复 "1" 或 "2" 表示评价（支持半角/全角）
+    # ==================== 优先判断特殊意图 ====================
+    
+    # 1. 评价反馈（支持半角/全角）
     if user_message in ["1", "１", "【1】", "【１】"]:
         return IntentRecognitionOutput(intent="feedback_good")
     if user_message in ["2", "２", "【2】", "【２】"]:
         return IntentRecognitionOutput(intent="feedback_bad")
-    # 也支持文字形式评价
+    # 文字形式评价
     if user_message in ["很好", "满意", "有帮助"]:
         return IntentRecognitionOutput(intent="feedback_good")
     if user_message in ["没有帮助", "不满意", "没用"]:
         return IntentRecognitionOutput(intent="feedback_bad")
+    
+    # 2. 转人工（关键词匹配，优先级最高）
+    transfer_keywords = ["转人工", "人工客服", "转接人工", "接人工", "人工服务", "转客服"]
+    for keyword in transfer_keywords:
+        if keyword in user_message:
+            return IntentRecognitionOutput(intent="transfer_human")
+    
+    # 3. 不满意（用户表达不满）
+    dissatisfied_keywords = ["没用", "不行", "还是不行", "没帮助", "太差了", "不好用", 
+                            "没解决", "帮不了", "什么破", "垃圾", "投诉你"]
+    for keyword in dissatisfied_keywords:
+        if keyword in user_message:
+            return IntentRecognitionOutput(intent="dissatisfied")
+    
+    # ==================== 调用 LLM 判断复杂意图 ====================
     
     # 读取配置文件
     cfg_file = os.path.join(
@@ -92,11 +109,15 @@ def intent_recognition_node(
     
     # 提取意图关键词
     intent = "usage_guidance"  # 默认值
-    if "使用指导" in intent_text or "扫码" in intent_text:
+    if "使用指导" in intent_text:
         intent = "usage_guidance"
-    elif "故障处理" in intent_text or "充电" in intent_text or "拔不" in intent_text:
+    elif "故障处理" in intent_text:
         intent = "fault_handling"
-    elif "投诉" in intent_text or "退款" in intent_text or "计费" in intent_text:
+    elif "投诉" in intent_text:
         intent = "complaint"
+    elif "转人工" in intent_text:
+        intent = "transfer_human"
+    elif "不满意" in intent_text:
+        intent = "dissatisfied"
     
     return IntentRecognitionOutput(intent=intent)
