@@ -101,6 +101,23 @@ def fallback_node(
     
     logger.info(f"兜底流程 - 当前阶段: {phase}, 用户消息: {user_message}")
     
+    # ==================== 取消机制 ====================
+    # 用户可以在任何阶段取消兜底流程
+    cancel_keywords = ["取消", "不用了", "算了", "不需要了", "不用管了", "没事了", "不要了", "不麻烦了"]
+    # 使用模糊匹配，检测用户是否想取消
+    for keyword in cancel_keywords:
+        if keyword in user_message:
+            logger.info(f"兜底流程 - 用户取消（关键词: {keyword}）")
+            return FallbackOutput(
+                reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
+                fallback_phase="",  # 清空状态，退出兜底流程
+                phone="",
+                license_plate="",
+                problem_summary="",
+                user_supplement="",
+                case_confirmed=False
+            )
+    
     # ==================== 阶段1：收集信息 ====================
     if phase == "collect_info":
         phone = state.phone

@@ -1,7 +1,9 @@
 """
 邮件发送节点 - 发送用户投诉信息到指定邮箱
+支持重试机制，最多重试3次
 """
 import json
+import logging
 import smtplib
 import ssl
 import time
@@ -18,9 +20,15 @@ from cozeloop.decorator import observe
 
 from graphs.state import EmailSendingInput, EmailSendingOutput
 
+# 配置日志
+logger = logging.getLogger(__name__)
 
 # 收件邮箱（客服邮箱）
 RECIPIENT_EMAIL = "xuefu.song@qq.com"
+
+# 重试配置
+MAX_RETRY_ATTEMPTS = 3
+RETRY_DELAY_BASE = 2  # 基础延迟秒数
 
 
 def get_email_config() -> Dict[str, Any]:
@@ -37,7 +45,7 @@ def send_complaint_email(
     to_addr: str
 ) -> Dict[str, Any]:
     """
-    发送投诉信息邮件
+    发送投诉信息邮件（支持重试）
     
     Args:
         subject: 邮件主题
@@ -63,11 +71,15 @@ def send_complaint_email(
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         
         # 重试机制
-        attempts = 3
         last_err = None
+        last_attempt = False
         
-        for i in range(attempts):
+        for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+            last_attempt = (attempt == MAX_RETRY_ATTEMPTS)
+            
             try:
+                logger.info(f"邮件发送尝试 {attempt}/{MAX_RETRY_ATTEMPTS}")
+                
                 with smtplib.SMTP_SSL(
                     config["smtp_server"],
                     config["smtp_port"],
@@ -79,9 +91,11 @@ def send_complaint_email(
                     server.sendmail(config["account"], [to_addr], msg.as_string())
                     server.quit()
                 
+                logger.info(f"邮件发送成功 - 收件人: {to_addr}")
                 return {
                     "status": "success",
-                    "message": f"邮件已成功发送至 {to_addr}"
+                    "message": f"邮件已成功发送至 {to_addr}",
+                    "attempts": attempt
                 }
                 
             except (
@@ -90,31 +104,46 @@ def send_complaint_email(
                 smtplib.SMTPDataError,
                 smtplib.SMTPHeloError,
                 ssl.SSLError,
-                OSError
+                OSError,
+                TimeoutError
             ) as e:
                 last_err = e
-                time.sleep(1 * (i + 1))
+                logger.warning(f"邮件发送失败 (尝试 {attempt}/{MAX_RETRY_ATTEMPTS}): {str(e)}")
+                
+                # 如果不是最后一次尝试，等待后重试
+                if not last_attempt:
+                    delay = RETRY_DELAY_BASE * attempt  # 递增延迟：2s, 4s, 6s
+                    logger.info(f"等待 {delay} 秒后重试...")
+                    time.sleep(delay)
         
+        # 所有尝试都失败
         if last_err:
+            logger.error(f"邮件发送最终失败: {str(last_err)}")
             return {
                 "status": "error",
-                "message": "发送失败",
+                "message": "发送失败，已重试3次",
                 "detail": str(last_err)
             }
         
         return {"status": "error", "message": "发送失败: 未知错误"}
         
     except smtplib.SMTPAuthenticationError as e:
+        logger.error(f"邮件认证失败: {str(e)}")
         return {"status": "error", "message": f"认证失败: {str(e)}"}
     except smtplib.SMTPRecipientsRefused as e:
+        logger.error(f"收件人被拒绝: {str(e)}")
         return {"status": "error", "message": "收件人被拒绝"}
     except smtplib.SMTPSenderRefused as e:
+        logger.error(f"发件人被拒绝: {str(e)}")
         return {"status": "error", "message": f"发件人被拒绝"}
     except smtplib.SMTPDataError as e:
+        logger.error(f"数据被拒绝: {str(e)}")
         return {"status": "error", "message": f"数据被拒绝"}
     except smtplib.SMTPConnectError as e:
+        logger.error(f"连接失败: {str(e)}")
         return {"status": "error", "message": f"连接失败: {str(e)}"}
     except Exception as e:
+        logger.error(f"邮件发送异常: {str(e)}")
         return {"status": "error", "message": f"发送失败: {str(e)}"}
 
 
@@ -125,7 +154,7 @@ def email_sending_node(
 ) -> EmailSendingOutput:
     """
     title: 邮件发送
-    desc: 将用户问题信息发送到客服邮箱（支持兜底流程和投诉场景）
+    desc: 将用户问题信息发送到客服邮箱（支持重试，最多3次）
     integrations: 邮件
     """
     # 获取上下文
@@ -137,8 +166,12 @@ def email_sending_node(
     problem_summary = state.problem_summary or state.user_info.get("description", "")
     case_id = state.case_id or "无"
     
-    # 构建邮件主题
-    subject = f"【充电桩客服】用户问题反馈 - 工单:{case_id} 手机:{phone}"
+    logger.info(f"邮件发送节点 - 手机: {phone}, 车牌: {license_plate}, 工单: {case_id}")
+    
+    # 构建邮件主题（包含工单号，便于内部跟踪）
+    subject = f"【充电桩客服】用户问题反馈 - 手机:{phone}"
+    if case_id and case_id != "无":
+        subject = f"【充电桩客服】用户问题反馈 - 工单:{case_id} 手机:{phone}"
     
     # 构建邮件正文（HTML格式）
     html_content = f"""
@@ -194,7 +227,7 @@ def email_sending_node(
     </html>
     """
     
-    # 发送邮件
+    # 发送邮件（带重试）
     result = send_complaint_email(
         subject=subject,
         content=html_content,
@@ -204,15 +237,22 @@ def email_sending_node(
     # 判断是否发送成功
     email_sent = result.get("status") == "success"
     
-    # 生成回复
+    # 生成回复（不向用户展示工单号）
     if email_sent:
-        reply_content = f"""✅ 您的问题已成功提交！
+        logger.info("邮件发送成功")
+        reply_content = """✅ 您的问题已成功提交！
 
-📋 工单编号：{case_id}
+我们的工作人员会在24小时内联系您处理，请保持电话畅通。
 
-我们的工作人员会在24小时内联系您处理，请保持电话畅通。"""
+如有其他问题，随时可以问我。"""
     else:
-        reply_content = f"⚠️ 信息提交失败：{result.get('message', '未知错误')}\n\n请直接联系客服电话：400-XXX-XXXX"
+        error_msg = result.get("message", "未知错误")
+        logger.error(f"邮件发送失败: {error_msg}")
+        reply_content = f"""⚠️ 信息提交失败：{error_msg}
+
+请直接联系客服电话：400-XXX-XXXX
+
+我们会尽快为您处理。"""
     
     return EmailSendingOutput(
         email_sent=email_sent,
