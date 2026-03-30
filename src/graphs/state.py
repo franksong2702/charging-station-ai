@@ -154,8 +154,9 @@ class InfoCollectionOutput(BaseModel):
 
 class EmailSendingInput(BaseModel):
     """邮件发送节点的输入"""
-    user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（旧格式，兼容）")
+    user_id: str = Field(default="", description="用户身份标识")
     user_message: str = Field(default="", description="用户原始消息")
+    user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（旧格式，兼容）")
     # 新增字段：兜底流程数据
     phone: str = Field(default="", description="用户手机号")
     license_plate: str = Field(default="", description="用户车牌号")
@@ -264,3 +265,17 @@ class CreateCaseOutput(BaseModel):
     """创建工单节点的输出"""
     case_created: bool = Field(default=True, description="工单是否创建成功")
     case_id: str = Field(default="", description="工单ID")
+
+
+# ==================== 清除兜底状态节点 ====================
+
+class ClearFallbackStateInput(BaseModel):
+    """清除兜底状态节点的输入"""
+    user_id: str = Field(default="", description="用户身份标识")
+    user_message: str = Field(default="", description="用户消息")
+    reply_content: str = Field(default="", description="AI回复内容")
+
+
+class ClearFallbackStateOutput(BaseModel):
+    """清除兜底状态节点的输出"""
+    cleared: bool = Field(default=True, description="是否清除成功")

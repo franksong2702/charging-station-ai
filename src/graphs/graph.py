@@ -22,7 +22,8 @@ from graphs.state import (
     SaveRecordInput,
     DissatisfiedInput,
     FallbackInput,
-    CreateCaseInput
+    CreateCaseInput,
+    ClearFallbackStateInput
 )
 
 from graphs.nodes.input_process_node import input_process_node
