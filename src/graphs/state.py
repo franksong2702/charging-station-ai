@@ -174,11 +174,21 @@ class EmailSendingOutput(BaseModel):
 class LoadHistoryInput(BaseModel):
     """加载对话历史节点的输入"""
     user_id: str = Field(default="", description="用户身份标识（可选）")
+    # GraphInput 中传入的兜底流程状态（优先使用）
+    fallback_phase: str = Field(default="", description="兜底流程阶段（来自 GraphInput）")
+    phone: str = Field(default="", description="手机号（来自 GraphInput）")
+    license_plate: str = Field(default="", description="车牌号（来自 GraphInput）")
+    problem_summary: str = Field(default="", description="问题总结（来自 GraphInput）")
 
 
 class LoadHistoryOutput(BaseModel):
     """加载对话历史节点的输出"""
     conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
+    # 兜底流程状态
+    fallback_phase: str = Field(default="", description="兜底流程阶段")
+    phone: str = Field(default="", description="用户手机号")
+    license_plate: str = Field(default="", description="用户车牌号")
+    problem_summary: str = Field(default="", description="问题总结")
 
 
 # ==================== 保存对话历史节点 ====================
@@ -189,6 +199,11 @@ class SaveHistoryInput(BaseModel):
     user_message: str = Field(default="", description="用户发送的消息")
     reply_content: str = Field(default="", description="AI回复内容")
     intent: str = Field(default="", description="意图类型")
+    # 兜底流程状态
+    fallback_phase: str = Field(default="", description="兜底流程阶段")
+    phone: str = Field(default="", description="用户手机号")
+    license_plate: str = Field(default="", description="用户车牌号")
+    problem_summary: str = Field(default="", description="问题总结")
 
 
 class SaveHistoryOutput(BaseModel):

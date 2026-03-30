@@ -39,6 +39,7 @@ from graphs.nodes.dissatisfied_node import dissatisfied_node
 from graphs.nodes.satisfied_node import satisfied_node
 from graphs.nodes.fallback_node import fallback_node
 from graphs.nodes.create_case_node import create_case_node
+from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 
 
 # ==================== 条件判断函数 ====================
@@ -222,6 +223,13 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
+# 清除兜底状态（新增）
+builder.add_node(
+    "clear_fallback_state",
+    clear_fallback_state_node,
+    metadata={"type": "task"}
+)
+
 # ==================== 设置入口点 ====================
 
 builder.set_entry_point("load_history")
@@ -278,15 +286,19 @@ builder.add_conditional_edges(
     path=route_by_case_confirmed,
     path_map={
         "创建工单": "create_case",
-        "继续兜底": END  # 用户还需要继续输入信息
+        "继续兜底": "save_history"  # 用户还需要继续交互，保存状态
     }
 )
+
+# 保存历史后结束（兜底流程中间状态）
+builder.add_edge("save_history", END)
 
 # 创建工单 → 邮件发送
 builder.add_edge("create_case", "email_sending")
 
-# 邮件发送 → 结束
-builder.add_edge("email_sending", END)
+# 邮件发送 → 清除兜底状态 → 结束
+builder.add_edge("email_sending", "clear_fallback_state")
+builder.add_edge("clear_fallback_state", END)
 
 # 投诉兜底流程（保留旧流程兼容）
 # complaint 意图走 info_collection → email_sending

@@ -1,4 +1,6 @@
-"""保存对话历史节点 - 用于多轮对话上下文"""
+"""
+保存对话历史节点 - 用于多轮对话上下文和兜底流程状态
+"""
 from typing import Dict, Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
@@ -16,7 +18,7 @@ def save_history_node(
 ) -> SaveHistoryOutput:
     """
     title: 保存对话历史
-    desc: 将当前对话保存到数据库，用于后续多轮对话上下文
+    desc: 将当前对话和兜底流程状态保存到数据库
     integrations: Supabase
     """
     # 如果没有 user_id，跳过保存
@@ -30,13 +32,26 @@ def save_history_node(
     try:
         client = get_supabase_client()
         
-        # 插入对话记录
-        client.table("conversation_history").insert({
+        # 构建插入数据
+        insert_data = {
             "user_id": state.user_id,
             "user_message": state.user_message,
             "reply_content": state.reply_content,
             "intent": state.intent if state.intent else None
-        }).execute()
+        }
+        
+        # 如果有兜底流程状态，也保存进去
+        if state.fallback_phase:
+            insert_data["fallback_phase"] = state.fallback_phase
+        if state.phone:
+            insert_data["phone"] = state.phone
+        if state.license_plate:
+            insert_data["license_plate"] = state.license_plate
+        if state.problem_summary:
+            insert_data["problem_summary"] = state.problem_summary
+        
+        # 插入对话记录
+        client.table("conversation_history").insert(insert_data).execute()
         
         return SaveHistoryOutput(saved=True)
         
