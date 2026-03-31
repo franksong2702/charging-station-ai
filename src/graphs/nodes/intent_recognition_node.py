@@ -52,21 +52,17 @@ def intent_recognition_node(
     # 2. 强烈不满或转人工 → 走兜底流程
     # 强烈不满关键词（情绪激烈，需要人工介入）
     strong_dissatisfied_keywords = ["太差了", "垃圾", "投诉你", "什么破", "什么垃圾", 
-                                    "要投诉", "强烈不满", "气死我了", "骗子", "坑人"]
+                                    "要投诉", "强烈不满", "气死我了", "骗子", "坑人",
+                                    "转人工", "人工客服", "转接人工", "接人工", "人工服务", "转客服"]
     for keyword in strong_dissatisfied_keywords:
-        if keyword in user_message:
-            return IntentRecognitionOutput(intent="fallback")
-    
-    # 转人工 → 合并到兜底流程
-    transfer_keywords = ["转人工", "人工客服", "转接人工", "接人工", "人工服务", "转客服"]
-    for keyword in transfer_keywords:
         if keyword in user_message:
             return IntentRecognitionOutput(intent="fallback")
     
     # 3. 轻度不满 → AI 继续尝试帮助
     # 轻度不满关键词（可以尝试继续帮助）
     mild_dissatisfied_keywords = ["没用", "不行", "还是不行", "没帮助", "不好用", 
-                                  "没解决", "帮不了", "还是不会", "搞不定"]
+                                  "没解决", "帮不了", "还是不会", "搞不定",
+                                  "为什么没有", "什么时候", "怎么没有", "为什么找不到"]
     for keyword in mild_dissatisfied_keywords:
         if keyword in user_message:
             return IntentRecognitionOutput(intent="dissatisfied")

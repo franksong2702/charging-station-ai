@@ -22,17 +22,29 @@ logger = logging.getLogger(__name__)
 
 def _extract_phone(text: str) -> str:
     """从文本中提取手机号"""
-    # 匹配11位手机号
-    pattern = r'1[3-9]\d{9}'
-    match = re.search(pattern, text)
-    return match.group() if match else ""
+    # 先移除所有非数字字符，只保留数字
+    digits_only = re.sub(r'[^\d]', '', text)
+    
+    # 匹配11位手机号（1开头）
+    if len(digits_only) >= 11:
+        # 从中找11位手机号
+        pattern = r'1[3-9]\d{9}'
+        match = re.search(pattern, digits_only)
+        if match:
+            return match.group()
+    
+    return ""
 
 
 def _extract_license_plate(text: str) -> str:
     """从文本中提取车牌号"""
-    # 匹配车牌号格式（如：京A12345）
+    # 先移除空格，统一格式
+    text_no_space = text.replace(' ', '').replace('　', '')  # 移除半角和全角空格
+    
+    # 匹配车牌号格式（如：京A12345，沪ADG9676）
+    # 支持新能源车牌（8位）和普通车牌（7位）
     pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{5,6}'
-    match = re.search(pattern, text)
+    match = re.search(pattern, text_no_space.upper())  # 转大写匹配
     return match.group() if match else ""
 
 
