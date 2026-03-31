@@ -20,32 +20,84 @@ from graphs.state import FallbackInput, FallbackOutput
 logger = logging.getLogger(__name__)
 
 
-def _extract_phone(text: str) -> str:
-    """从文本中提取手机号"""
-    # 先移除所有非数字字符，只保留数字
-    digits_only = re.sub(r'[^\d]', '', text)
+def _extract_info_by_llm(
+    ctx,
+    user_message: str
+) -> dict:
+    """
+    使用 LLM 从文本中提取手机号和车牌号
     
-    # 匹配11位手机号（1开头）
-    if len(digits_only) >= 11:
-        # 从中找11位手机号
-        pattern = r'1[3-9]\d{9}'
-        match = re.search(pattern, digits_only)
-        if match:
-            return match.group()
-    
-    return ""
+    Args:
+        ctx: 上下文
+        user_message: 用户消息
+        
+    Returns:
+        {"phone": "手机号", "license_plate": "车牌号"}
+    """
+    prompt = f"""请从用户消息中提取手机号和车牌号信息。
 
+用户消息：{user_message}
 
-def _extract_license_plate(text: str) -> str:
-    """从文本中提取车牌号"""
-    # 先移除空格，统一格式
-    text_no_space = text.replace(' ', '').replace('　', '')  # 移除半角和全角空格
+提取规则：
+1. 手机号：11位数字，以1开头。用户可能用各种格式输入（带横线、空格等），请提取并标准化为纯数字。
+2. 车牌号：省份简称+字母+5-6位字母或数字。用户可能中间有空格，请提取并标准化为无空格格式。
+3. 如果某项信息不存在，返回空字符串。
+
+请直接返回JSON格式，不要其他说明：
+{{"phone": "手机号", "license_plate": "车牌号"}}"""
+
+    client = LLMClient(ctx=ctx)
+    response = client.invoke(
+        messages=[HumanMessage(content=prompt)],
+        model="doubao-seed-1-8-251228",
+        temperature=0.1,  # 低温度，更确定性的输出
+        max_completion_tokens=100
+    )
     
-    # 匹配车牌号格式（如：京A12345，沪ADG9676）
-    # 支持新能源车牌（8位）和普通车牌（7位）
-    pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{5,6}'
-    match = re.search(pattern, text_no_space.upper())  # 转大写匹配
-    return match.group() if match else ""
+    # 提取内容
+    content = response.content
+    if isinstance(content, list):
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text_parts.append(item.get("text", ""))
+            elif isinstance(item, str):
+                text_parts.append(item)
+        content = " ".join(text_parts).strip()
+    else:
+        content = str(content).strip()
+    
+    # 解析 JSON
+    try:
+        # 清理可能的 markdown 代码块
+        json_str = content.strip()
+        if json_str.startswith("```"):
+            json_str = re.sub(r'^```json?\s*', '', json_str)
+            json_str = re.sub(r'\s*```$', '', json_str)
+        
+        result = json.loads(json_str)
+        
+        phone = str(result.get("phone", "")).strip()
+        license_plate = str(result.get("license_plate", "")).strip()
+        
+        # 验证手机号格式
+        if phone and len(re.sub(r'\D', '', phone)) == 11:
+            phone = re.sub(r'\D', '', phone)  # 只保留数字
+        else:
+            phone = ""
+        
+        # 验证车牌号格式（简单校验）
+        if license_plate and len(license_plate.replace(" ", "")) >= 7:
+            license_plate = license_plate.replace(" ", "").upper()
+        else:
+            license_plate = ""
+        
+        logger.info(f"LLM 提取结果 - 手机号: {phone}, 车牌号: {license_plate}")
+        return {"phone": phone, "license_plate": license_plate}
+        
+    except json.JSONDecodeError as e:
+        logger.warning(f"LLM 返回 JSON 解析失败: {e}, 原始内容: {content}")
+        return {"phone": "", "license_plate": ""}
 
 
 def _generate_problem_summary(
@@ -135,9 +187,10 @@ def fallback_node(
         phone = state.phone
         license_plate = state.license_plate
         
-        # 尝试从用户消息中提取信息
-        extracted_phone = _extract_phone(user_message)
-        extracted_plate = _extract_license_plate(user_message)
+        # 使用 LLM 从用户消息中提取信息
+        extracted = _extract_info_by_llm(ctx, user_message)
+        extracted_phone = extracted.get("phone", "")
+        extracted_plate = extracted.get("license_plate", "")
         
         if extracted_phone:
             phone = extracted_phone
