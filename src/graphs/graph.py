@@ -68,29 +68,22 @@ def route_by_intent(state: GlobalState) -> str:
     elif intent == "fault_handling":
         return "故障处理"
     elif intent == "complaint":
-        # 投诉兜底 → 走兜底流程
         return "兜底流程"
     elif intent == "fallback":
-        # 强烈不满/转人工 → 走兜底流程
         return "兜底流程"
     elif intent == "cancel_fallback":
-        # 用户主动取消兜底 → 清除状态后正常处理
         return "退出兜底"
     elif intent == "exit_fallback":
-        # 用户问新问题 → 清除状态后正常处理
         return "退出兜底"
     elif intent == "dissatisfied":
-        # 轻度不满 → AI 继续尝试帮助
         return "不满意"
     elif intent == "satisfied":
-        # 用户表达满意 → 感谢并请求评价
         return "满意"
     elif intent == "feedback_good":
         return "评价反馈"
     elif intent == "feedback_bad":
         return "评价反馈"
     else:
-        # 默认走知识库问答
         return "使用指导"
 
 
@@ -270,22 +263,22 @@ builder.add_conditional_edges(
         "不满意": "dissatisfied",
         "满意": "satisfied",
         "评价反馈": "feedback",
-        "退出兜底": "clear_fallback_state"  # 退出兜底时先清除状态
+        "退出兜底": "clear_fallback_state"
     }
 )
 
-# 知识库问答 → 保存历史 → 保存记录
+# 知识库问答 → 保存历史 → 保存记录 → 结束
 builder.add_edge("knowledge_qa", "save_history")
 builder.add_edge("save_history", "save_record")
 builder.add_edge("save_record", END)
 
-# 评价反馈 → 保存记录
+# 评价反馈 → 保存记录 → 结束
 builder.add_edge("feedback", "save_record")
 
-# 轻度不满 → 保存记录
+# 轻度不满 → 保存记录 → 结束
 builder.add_edge("dissatisfied", "save_record")
 
-# 满意 → 保存记录
+# 满意 → 保存记录 → 结束
 builder.add_edge("satisfied", "save_record")
 
 # 兜底流程判断
@@ -294,24 +287,18 @@ builder.add_conditional_edges(
     path=route_by_case_confirmed,
     path_map={
         "创建工单": "create_case",
-        "继续兜底": "save_history"  # 用户还需要继续交互，保存状态
+        "继续兜底": "save_history"
     }
 )
 
-# 保存历史后结束（兜底流程中间状态）
-builder.add_edge("save_history", END)
-
-# 创建工单 → 邮件发送
+# 创建工单 → 邮件发送 → 结束
 builder.add_edge("create_case", "email_sending")
-
-# 退出兜底 → 清除状态 → 知识库问答（继续处理用户问题）
-builder.add_edge("clear_fallback_state", "knowledge_qa")
-
-# 邮件发送 → 结束（兜底流程已完成）
 builder.add_edge("email_sending", END)
 
+# 退出兜底 → 清除状态 → 知识库问答
+builder.add_edge("clear_fallback_state", "knowledge_qa")
+
 # 投诉兜底流程（保留旧流程兼容）
-# complaint 意图走 info_collection → email_sending
 builder.add_edge("info_collection", "email_sending")
 
 # ==================== 编译图 ====================
