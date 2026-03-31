@@ -315,8 +315,3 @@ class IntentRouteCheck(BaseModel):
 class CaseConfirmedCheck(BaseModel):
     """工单确认判断的条件输入"""
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
-
-
-class UserIdCheck(BaseModel):
-    """用户ID判断的条件输入"""
-    user_id: str = Field(default="", description="用户身份标识")
