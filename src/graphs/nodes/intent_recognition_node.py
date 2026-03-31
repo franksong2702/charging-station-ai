@@ -49,7 +49,16 @@ def intent_recognition_node(
     if user_message in ["没有帮助", "不满意", "没用"]:
         return IntentRecognitionOutput(intent="feedback_bad")
     
-    # 2. 强烈不满或转人工 → 走兜底流程
+    # 2. 故障处理（优先判断，避免被误判为兜底）
+    # 充电相关问题关键词
+    fault_keywords = ["充不进去", "充不上", "充不进", "充不了", "充不起", 
+                      "充电失败", "充不进电", "充不上电",
+                      "拔不出来", "停不下来", "充电慢", "坏了", "故障"]
+    for keyword in fault_keywords:
+        if keyword in user_message:
+            return IntentRecognitionOutput(intent="fault_handling")
+    
+    # 3. 强烈不满或转人工 → 走兜底流程
     # 强烈不满关键词（情绪激烈，需要人工介入）
     strong_dissatisfied_keywords = ["太差了", "垃圾", "投诉你", "什么破", "什么垃圾", 
                                     "要投诉", "强烈不满", "气死我了", "骗子", "坑人",
@@ -58,7 +67,7 @@ def intent_recognition_node(
         if keyword in user_message:
             return IntentRecognitionOutput(intent="fallback")
     
-    # 3. 轻度不满 → AI 继续尝试帮助
+    # 4. 轻度不满 → AI 继续尝试帮助
     # 轻度不满关键词（可以尝试继续帮助）
     mild_dissatisfied_keywords = ["没用", "不行", "还是不行", "没帮助", "不好用", 
                                   "没解决", "帮不了", "还是不会", "搞不定",
@@ -67,7 +76,7 @@ def intent_recognition_node(
         if keyword in user_message:
             return IntentRecognitionOutput(intent="dissatisfied")
     
-    # 4. 满意（用户表达感谢）
+    # 5. 满意（用户表达感谢）
     satisfied_keywords = ["谢谢", "感谢", "好的好的", "好的 谢谢", "谢谢你", "多谢", "谢谢啦"]
     for keyword in satisfied_keywords:
         if keyword in user_message:
