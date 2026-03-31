@@ -10,7 +10,7 @@
 | input_process | `nodes/input_process_node.py` | task | 输入预处理 | - | - |
 | load_history | `nodes/load_history_node.py` | task | 加载对话历史和兜底状态 | - | - |
 | asr_node | `nodes/asr_node.py` | task | 语音转文字 | - | - |
-| intent_recognition | `nodes/intent_recognition_node.py` | agent | 意图识别（区分强烈不满/轻度不满） | - | `config/intent_recognition_llm_cfg.json` |
+| intent_recognition | `nodes/intent_recognition_node.py` | agent | 意图识别（区分强烈不满/轻度不满/退出兜底） | - | `config/intent_recognition_llm_cfg.json` |
 | knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 知识库问答 | - | `config/knowledge_qa_llm_cfg.json` |
 | dissatisfied | `nodes/dissatisfied_node.py` | agent | 轻度不满处理（道歉+询问详情） | - | `config/dissatisfied_llm_cfg.json` |
 | satisfied | `nodes/satisfied_node.py` | agent | 满意处理（感谢+请求评价） | - | `config/satisfied_llm_cfg.json` |
@@ -18,7 +18,7 @@
 | fallback | `nodes/fallback_node.py` | agent | 兜底流程（收集信息→生成总结→确认，支持取消） | - | `config/fallback_llm_cfg.json` |
 | create_case | `nodes/create_case_node.py` | task | 创建工单（内部流转） | - | - |
 | email_sending | `nodes/email_sending_node.py` | task | 发送邮件（支持重试3次） | - | - |
-| clear_fallback_state | `nodes/clear_fallback_state_node.py` | task | 清除兜底状态 | - | - |
+| clear_fallback_state | `nodes/clear_fallback_state_node.py` | task | 清除兜底状态（退出兜底时识别新意图） | - | - |
 | save_record | `nodes/save_record_node.py` | task | 保存对话记录（仅有价值记录） | - | - |
 | save_history | `nodes/save_history_node.py` | task | 保存对话历史和兜底状态 | - | - |
 
@@ -28,7 +28,7 @@
 | 节点名 | 文件位置 | 功能描述 | 分支逻辑 |
 |-------|---------|---------|---------|
 | route_by_voice | `graph.py` | 判断是否有语音输入 | "语音处理"→asr_node, "直接处理文字"→load_history |
-| route_by_intent | `graph.py` | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback |
+| route_by_intent | `graph.py` | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback, "退出兜底"→clear_fallback_state→knowledge_qa |
 | route_by_case_confirmed | `graph.py` | 工单确认判断 | "创建工单"→create_case, "继续兜底"→save_history |
 
 ## 子图清单
@@ -55,6 +55,16 @@
 ### 故障处理
 充电停不下来、枪拔不出来、充电失败、充电速度慢等设备或操作故障
 
+### 退出兜底（重要）
+**当用户在兜底流程中问新问题时，自动退出兜底流程：**
+- 用户发送明显的新问题（包含"怎么"、"如何"、"为什么"等）
+- 用户发送取消关键词（"取消"、"不用了"、"算了"等）
+
+**智能判断逻辑**：
+1. 如果用户输入的是手机号/车牌号/确认等兜底相关信息 → 继续兜底
+2. 如果用户输入的是新问题 → 退出兜底，正常处理问题
+3. 如果用户取消 → 退出兜底，提示用户
+
 ## 兜底流程设计
 
 ### 触发条件
@@ -63,7 +73,7 @@
 
 ### 流程阶段
 ```
-用户触发兜底 → collect_info（收集信息）→ confirm（用户确认）→ 创建工单 → 发送邮件 → 清除状态
+用户触发兜底 → collect_info（收集信息）→ confirm（用户确认）→ 创建工单 → 发送邮件 → 结束
 ```
 
 ### 信息提取（LLM 智能提取）

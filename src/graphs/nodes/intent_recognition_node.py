@@ -32,8 +32,49 @@ def intent_recognition_node(
     user_message = state.user_message.strip()
     
     # ==================== 检查是否在兜底流程中 ====================
-    # 如果 fallback_phase 不为空，直接返回 fallback 意图继续兜底流程
+    # 如果 fallback_phase 不为空，需要判断用户是想继续兜底还是问新问题
     if state.fallback_phase:
+        # 1. 检查是否是取消兜底
+        cancel_keywords = ["取消", "不用了", "算了", "不需要了", "不用管了", "没事了", "不要了", "不麻烦了"]
+        for keyword in cancel_keywords:
+            if keyword in user_message:
+                # 用户取消兜底，清空状态，正常识别意图
+                return IntentRecognitionOutput(intent="cancel_fallback")
+        
+        # 2. 检查是否是兜底流程相关输入（手机号、车牌号、确认等）
+        # 手机号模式：11位数字或带分隔符的格式
+        import re
+        phone_pattern = r'1[3-9]\d[\s\-]?\d{4}[\s\-]?\d{4}|1[3-9]\d{9}|手机|电话'
+        # 车牌号模式：省份简称+字母+数字/字母
+        plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{4,6}|车牌'
+        # 确认关键词
+        confirm_keywords = ["确认", "确认无误", "没问题", "是的", "对", "好的"]
+        # 补充说明关键词
+        supplement_keywords = ["补充", "还有", "另外", "对了", "还有个问题"]
+        
+        is_phone_input = bool(re.search(phone_pattern, user_message, re.IGNORECASE))
+        is_plate_input = bool(re.search(plate_pattern, user_message, re.IGNORECASE))
+        is_confirm = user_message in confirm_keywords
+        is_supplement = any(kw in user_message for kw in supplement_keywords)
+        
+        # 如果是兜底相关输入，继续兜底流程
+        if is_phone_input or is_plate_input or is_confirm or is_supplement:
+            return IntentRecognitionOutput(intent="fallback")
+        
+        # 3. 检查是否是明显的新问题（包含问题特征）
+        question_patterns = [
+            r'怎么', r'如何', r'为什么', r'什么', r'哪', r'？', r'\?',
+            r'帮我', r'请问', r'咨询', r'想问', r'想了解',
+            r'充电', r'特斯拉', r'新能源', r'扫码', r'操作'
+        ]
+        
+        is_new_question = any(re.search(p, user_message) for p in question_patterns)
+        
+        if is_new_question:
+            # 用户在问新问题，退出兜底流程
+            return IntentRecognitionOutput(intent="exit_fallback")
+        
+        # 4. 其他情况继续兜底流程
         return IntentRecognitionOutput(intent="fallback")
     
     # ==================== 优先判断特殊意图 ====================

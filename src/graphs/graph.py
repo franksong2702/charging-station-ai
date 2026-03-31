@@ -73,6 +73,12 @@ def route_by_intent(state: GlobalState) -> str:
     elif intent == "fallback":
         # 强烈不满/转人工 → 走兜底流程
         return "兜底流程"
+    elif intent == "cancel_fallback":
+        # 用户主动取消兜底 → 清除状态后正常处理
+        return "退出兜底"
+    elif intent == "exit_fallback":
+        # 用户问新问题 → 清除状态后正常处理
+        return "退出兜底"
     elif intent == "dissatisfied":
         # 轻度不满 → AI 继续尝试帮助
         return "不满意"
@@ -263,7 +269,8 @@ builder.add_conditional_edges(
         "兜底流程": "fallback",
         "不满意": "dissatisfied",
         "满意": "satisfied",
-        "评价反馈": "feedback"
+        "评价反馈": "feedback",
+        "退出兜底": "clear_fallback_state"  # 退出兜底时先清除状态
     }
 )
 
@@ -297,9 +304,11 @@ builder.add_edge("save_history", END)
 # 创建工单 → 邮件发送
 builder.add_edge("create_case", "email_sending")
 
-# 邮件发送 → 清除兜底状态 → 结束
-builder.add_edge("email_sending", "clear_fallback_state")
-builder.add_edge("clear_fallback_state", END)
+# 退出兜底 → 清除状态 → 知识库问答（继续处理用户问题）
+builder.add_edge("clear_fallback_state", "knowledge_qa")
+
+# 邮件发送 → 结束（兜底流程已完成）
+builder.add_edge("email_sending", END)
 
 # 投诉兜底流程（保留旧流程兼容）
 # complaint 意图走 info_collection → email_sending

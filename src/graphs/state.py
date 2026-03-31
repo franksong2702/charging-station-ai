@@ -279,3 +279,9 @@ class ClearFallbackStateInput(BaseModel):
 class ClearFallbackStateOutput(BaseModel):
     """清除兜底状态节点的输出"""
     cleared: bool = Field(default=True, description="是否清除成功")
+    fallback_phase: str = Field(default="", description="清空后的兜底阶段（空字符串）")
+    phone: str = Field(default="", description="清空后的手机号")
+    license_plate: str = Field(default="", description="清空后的车牌号")
+    problem_summary: str = Field(default="", description="清空后的问题总结")
+    case_confirmed: bool = Field(default=False, description="重置确认状态")
+    intent: str = Field(default="usage_guidance", description="重置为默认意图")
