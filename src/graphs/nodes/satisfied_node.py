@@ -1,23 +1,31 @@
 """
 满意处理节点 - 用户表达满意时，感谢用户并请求评价
 """
+import logging
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 
-from graphs.state import DissatisfiedInput, DissatisfiedOutput
+from graphs.state import SatisfiedInput, SatisfiedOutput
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 def satisfied_node(
-    state: DissatisfiedInput,
+    state: SatisfiedInput,
     config: RunnableConfig,
     runtime: Runtime[Context]
-) -> DissatisfiedOutput:
+) -> SatisfiedOutput:
     """
     title: 满意处理
     desc: 用户表达满意时，感谢用户并请求评价
+    integrations: 无
     """
     ctx = runtime.context
+    
+    user_message = state.user_message.strip()
+    logger.info(f"用户表达满意: {user_message}")
     
     # 构建回复：感谢用户 + 请求评价
     reply_content = """不客气，很高兴能帮到您！😊
@@ -30,7 +38,7 @@ def satisfied_node(
 👍 有帮助
 👎 没有帮助"""
     
-    return DissatisfiedOutput(
+    return SatisfiedOutput(
         reply_content=reply_content,
-        dissatisfied_logged=False
+        satisfied_logged=True
     )

@@ -21,6 +21,7 @@ from graphs.state import (
     SaveHistoryInput,
     SaveRecordInput,
     DissatisfiedInput,
+    SatisfiedInput,
     FallbackInput,
     CreateCaseInput,
     ClearFallbackStateInput,

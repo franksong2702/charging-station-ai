@@ -12,10 +12,10 @@
 | asr_node | `nodes/asr_node.py` | task | 语音转文字 | - | - |
 | intent_recognition | `nodes/intent_recognition_node.py` | agent | 意图识别（区分强烈不满/轻度不满/退出兜底） | - | `config/intent_recognition_llm_cfg.json` |
 | knowledge_qa | `nodes/knowledge_qa_node.py` | agent | 知识库问答 | - | `config/knowledge_qa_llm_cfg.json` |
-| dissatisfied | `nodes/dissatisfied_node.py` | agent | 轻度不满处理（道歉+询问详情） | - | `config/dissatisfied_llm_cfg.json` |
-| satisfied | `nodes/satisfied_node.py` | agent | 满意处理（感谢+请求评价） | - | `config/satisfied_llm_cfg.json` |
-| feedback | `nodes/feedback_node.py` | agent | 评价反馈处理 | - | `config/feedback_llm_cfg.json` |
-| fallback | `nodes/fallback_node.py` | agent | 兜底流程（收集信息→生成总结→确认，支持取消） | - | `config/fallback_llm_cfg.json` |
+| dissatisfied | `nodes/dissatisfied_node.py` | task | 轻度不满处理（道歉+询问详情） | - | - |
+| satisfied | `nodes/satisfied_node.py` | task | 满意处理（感谢+请求评价） | - | - |
+| feedback | `nodes/feedback_node.py` | task | 评价反馈处理 | - | - |
+| fallback | `nodes/fallback_node.py` | task | 兜底流程（收集信息→生成总结→确认，支持取消，内部调用LLM） | - | - |
 | create_case | `nodes/create_case_node.py` | task | 创建工单（内部流转） | - | - |
 | email_sending | `nodes/email_sending_node.py` | task | 发送邮件（支持重试3次） | - | - |
 | clear_fallback_state | `nodes/clear_fallback_state_node.py` | task | 清除兜底状态（退出兜底时识别新意图） | - | - |

@@ -226,6 +226,19 @@ class DissatisfiedOutput(BaseModel):
     dissatisfied_logged: bool = Field(default=True, description="是否已记录不满意")
 
 
+# ==================== 满意处理节点 ====================
+
+class SatisfiedInput(BaseModel):
+    """满意处理节点的输入"""
+    user_message: str = Field(..., description="用户发送的消息")
+
+
+class SatisfiedOutput(BaseModel):
+    """满意处理节点的输出"""
+    reply_content: str = Field(..., description="回复内容")
+    satisfied_logged: bool = Field(default=True, description="是否已记录满意")
+
+
 # ==================== 兜底流程节点 ====================
 
 class FallbackInput(BaseModel):
