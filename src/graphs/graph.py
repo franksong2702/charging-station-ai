@@ -27,8 +27,7 @@ from graphs.state import (
     ClearFallbackStateInput,
     VoiceInputCheck,
     IntentRouteCheck,
-    CaseConfirmedCheck,
-    UserIdCheck
+    CaseConfirmedCheck
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -101,17 +100,6 @@ def route_by_case_confirmed(state: CaseConfirmedCheck) -> str:
         return "创建工单"
     else:
         return "继续兜底"
-
-
-def route_by_user_id(state: UserIdCheck) -> str:
-    """
-    title: 用户ID判断
-    desc: 判断是否有用户ID，决定是否需要加载对话历史
-    """
-    if state.user_id and state.user_id.strip():
-        return "加载历史"
-    else:
-        return "跳过历史"
 
 
 # ==================== 主图编排 ====================
