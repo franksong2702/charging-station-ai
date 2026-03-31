@@ -154,13 +154,15 @@ def knowledge_qa_node(
     # 初始化 LLM 客户端
     llm_client = LLMClient(ctx=ctx)
     
-    # 构建消息（包含对话历史）
+    # 构建消息（包含对话历史，但限制长度）
     messages = [SystemMessage(content=sp)]
     
-    # 添加对话历史（如果有）
+    # 添加对话历史（限制为最近6条，避免历史过长干扰回答）
     if state.conversation_history:
-        logger.info(f"加载对话历史，共 {len(state.conversation_history)} 条消息")
-        for msg in state.conversation_history:
+        # 只保留最近6条消息（3轮对话）
+        recent_history = state.conversation_history[-6:] if len(state.conversation_history) > 6 else state.conversation_history
+        logger.info(f"加载对话历史，共 {len(state.conversation_history)} 条，使用最近 {len(recent_history)} 条")
+        for msg in recent_history:
             role = msg.get("role", "")
             content = msg.get("content", "")
             if role == "user":
