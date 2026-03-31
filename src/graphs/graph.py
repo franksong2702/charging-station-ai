@@ -23,7 +23,11 @@ from graphs.state import (
     DissatisfiedInput,
     FallbackInput,
     CreateCaseInput,
-    ClearFallbackStateInput
+    ClearFallbackStateInput,
+    VoiceInputCheck,
+    IntentRouteCheck,
+    CaseConfirmedCheck,
+    UserIdCheck
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -45,7 +49,7 @@ from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 
 # ==================== 条件判断函数 ====================
 
-def route_by_voice_input(state: GlobalState) -> str:
+def route_by_voice_input(state: VoiceInputCheck) -> str:
     """
     title: 语音输入判断
     desc: 判断是否有语音输入，决定是否需要 ASR 处理
@@ -56,7 +60,7 @@ def route_by_voice_input(state: GlobalState) -> str:
         return "直接处理文字"
 
 
-def route_by_intent(state: GlobalState) -> str:
+def route_by_intent(state: IntentRouteCheck) -> str:
     """
     title: 意图路由
     desc: 根据意图识别结果，决定后续处理流程
@@ -87,7 +91,7 @@ def route_by_intent(state: GlobalState) -> str:
         return "使用指导"
 
 
-def route_by_case_confirmed(state: GlobalState) -> str:
+def route_by_case_confirmed(state: CaseConfirmedCheck) -> str:
     """
     title: 工单确认判断
     desc: 判断用户是否已确认问题总结，决定是否创建工单
@@ -98,7 +102,7 @@ def route_by_case_confirmed(state: GlobalState) -> str:
         return "继续兜底"
 
 
-def route_by_user_id(state: GlobalState) -> str:
+def route_by_user_id(state: UserIdCheck) -> str:
     """
     title: 用户ID判断
     desc: 判断是否有用户ID，决定是否需要加载对话历史

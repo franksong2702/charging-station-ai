@@ -285,3 +285,25 @@ class ClearFallbackStateOutput(BaseModel):
     problem_summary: str = Field(default="", description="清空后的问题总结")
     case_confirmed: bool = Field(default=False, description="重置确认状态")
     intent: str = Field(default="usage_guidance", description="重置为默认意图")
+
+
+# ==================== 条件判断节点输入类型 ====================
+
+class VoiceInputCheck(BaseModel):
+    """语音输入判断的条件输入"""
+    voice_url: str = Field(default="", description="用户发送的语音URL")
+
+
+class IntentRouteCheck(BaseModel):
+    """意图路由的条件输入"""
+    intent: str = Field(default="", description="识别的意图类型")
+
+
+class CaseConfirmedCheck(BaseModel):
+    """工单确认判断的条件输入"""
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+
+
+class UserIdCheck(BaseModel):
+    """用户ID判断的条件输入"""
+    user_id: str = Field(default="", description="用户身份标识")

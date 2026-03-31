@@ -3,6 +3,7 @@
 支持：使用指导、故障处理、投诉兜底、轻度不满、满意、评价反馈
 """
 import os
+import re
 import json
 from typing import Dict, Any
 from jinja2 import Template
@@ -43,7 +44,6 @@ def intent_recognition_node(
         
         # 2. 检查是否是兜底流程相关输入（手机号、车牌号、确认等）
         # 手机号模式：11位数字或带分隔符的格式
-        import re
         phone_pattern = r'1[3-9]\d[\s\-]?\d{4}[\s\-]?\d{4}|1[3-9]\d{9}|手机|电话'
         # 车牌号模式：省份简称+字母+数字/字母
         plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{4,6}|车牌'

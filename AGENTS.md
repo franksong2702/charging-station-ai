@@ -25,11 +25,11 @@
 **类型说明**: task(task节点) / agent(大模型) / condition(条件分支)
 
 ### 条件节点
-| 节点名 | 文件位置 | 功能描述 | 分支逻辑 |
-|-------|---------|---------|---------|
-| route_by_voice_input | `graph.py` | 判断是否有语音输入 | "语音处理"→asr, "直接处理文字"→intent_recognition |
-| route_by_intent | `graph.py` | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback, "退出兜底"→clear_fallback_state→knowledge_qa |
-| route_by_case_confirmed | `graph.py` | 工单确认判断 | "创建工单"→create_case, "继续兜底"→save_history |
+| 节点名 | 文件位置 | 输入类型 | 功能描述 | 分支逻辑 |
+|-------|---------|---------|---------|---------|
+| route_by_voice_input | `graph.py` | VoiceInputCheck | 判断是否有语音输入 | "语音处理"→asr, "直接处理文字"→intent_recognition |
+| route_by_intent | `graph.py` | IntentRouteCheck | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback, "退出兜底"→clear_fallback_state→knowledge_qa |
+| route_by_case_confirmed | `graph.py` | CaseConfirmedCheck | 工单确认判断 | "创建工单"→create_case, "继续兜底"→save_history |
 
 ## 子图清单
 无
