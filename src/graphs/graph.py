@@ -49,7 +49,7 @@ from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 
 # ==================== 条件判断函数 ====================
 
-def should_process_voice(state: VoiceInputCheck) -> str:
+def cond_input_process(state: VoiceInputCheck) -> str:
     """
     title: 语音输入判断
     desc: 判断是否有语音输入，决定是否需要 ASR 处理
@@ -60,7 +60,7 @@ def should_process_voice(state: VoiceInputCheck) -> str:
         return "直接处理文字"
 
 
-def should_route_intent(state: IntentRouteCheck) -> str:
+def cond_intent_recognition(state: IntentRouteCheck) -> str:
     """
     title: 意图路由
     desc: 根据意图识别结果，决定后续处理流程
@@ -91,7 +91,7 @@ def should_route_intent(state: IntentRouteCheck) -> str:
         return "使用指导"
 
 
-def should_create_case(state: CaseConfirmedCheck) -> str:
+def cond_fallback(state: CaseConfirmedCheck) -> str:
     """
     title: 工单确认判断
     desc: 判断用户是否已确认问题总结，决定是否创建工单
@@ -235,7 +235,7 @@ builder.add_edge("load_history", "input_process")
 # 语音输入判断
 builder.add_conditional_edges(
     source="input_process",
-    path=should_process_voice,
+    path=cond_input_process,
     path_map={
         "语音处理": "asr",
         "直接处理文字": "intent_recognition"
@@ -248,7 +248,7 @@ builder.add_edge("asr", "intent_recognition")
 # 意图路由
 builder.add_conditional_edges(
     source="intent_recognition",
-    path=should_route_intent,
+    path=cond_intent_recognition,
     path_map={
         "使用指导": "knowledge_qa",
         "故障处理": "knowledge_qa",
@@ -277,7 +277,7 @@ builder.add_edge("satisfied", "save_record")
 # 兜底流程判断
 builder.add_conditional_edges(
     source="fallback",
-    path=should_create_case,
+    path=cond_fallback,
     path_map={
         "创建工单": "create_case",
         "继续兜底": "save_history"
