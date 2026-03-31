@@ -47,21 +47,22 @@ def _search_knowledge_with_retry(
             
             search_response = knowledge_client.search(
                 query=query,
-                top_k=5,
-                min_score=0.3  # 降低阈值，增加匹配概率
+                top_k=3,  # 取前3条，确保能匹配到
+                min_score=0.3
             )
             
             if search_response.code == 0 and search_response.chunks:
-                for chunk in search_response.chunks:
-                    chunk_dict = {
-                        "content": chunk.content,
-                        "score": chunk.score,
-                        "doc_id": chunk.doc_id
-                    }
-                    knowledge_chunks.append(chunk_dict)
-                    knowledge_context += f"\n{chunk.content}\n"
+                # 只使用第一条（最相关的）
+                chunk = search_response.chunks[0]
+                chunk_dict = {
+                    "content": chunk.content,
+                    "score": chunk.score,
+                    "doc_id": chunk.doc_id
+                }
+                knowledge_chunks.append(chunk_dict)
+                knowledge_context = chunk.content  # 只使用一条内容
                 
-                logger.info(f"知识库搜索成功，找到 {len(knowledge_chunks)} 条相关内容")
+                logger.info(f"知识库搜索成功，找到相关内容，得分: {chunk.score:.2f}")
                 return knowledge_chunks, knowledge_context, True
             else:
                 logger.warning(f"知识库搜索返回空结果: code={search_response.code}")
@@ -115,33 +116,23 @@ def knowledge_qa_node(
     sp = _cfg.get("sp", "")
     up = _cfg.get("up", "")
     
-    # 如果知识库搜索失败，使用降级方案
-    if not kb_success:
-        logger.warning("知识库搜索失败，使用降级方案：直接LLM回答")
+    # 如果知识库搜索失败或无结果，使用降级方案
+    if not kb_success or not knowledge_context:
+        logger.warning("知识库搜索失败或无结果，使用降级方案：直接LLM回答")
         # 使用降级系统提示词
-        fallback_sp = """你是一个充电桩智能客服助手。
-
-你的职责是：
-1. 帮助用户解决充电桩使用问题
-2. 提供充电桩操作指导
-3. 处理用户的故障咨询
-
-回复要求：
-- 友好、专业、简洁
-- 如果不确定具体问题，请引导用户描述更详细的情况
-- 如果涉及投诉、退款等问题，建议用户联系人工客服
-
-请根据用户的问题，尽力提供帮助。"""
+        fallback_sp = """你是充电桩客服。回答规则：
+1. 简洁明了，不超过50字
+2. 如果是使用问题，告诉用户基本流程：解锁充电口→扫码→插枪→充电
+3. 如果是故障问题，建议联系现场工作人员
+4. 返回JSON格式：{"reply_content": "回答"}"""
         
         fallback_up = f"""用户问题：{state.user_message}
 
-问题类型：{state.intent}
-
-请帮助用户解决问题。如果问题不在你的知识范围内，请引导用户联系人工客服。"""
+请简洁回答，返回JSON。"""
         
         sp = fallback_sp
         up = fallback_up
-        knowledge_context = "（知识库暂时不可用）"
+        knowledge_context = ""
     
     # 渲染提示词
     up_tpl = Template(up)
