@@ -1,6 +1,6 @@
 """
 充电桩智能客服工作流主图编排
-支持文字和语音输入，支持评价机制，支持多轮对话，支持兜底流程和工单创建
+支持评价机制，支持多轮对话，支持兜底流程和工单创建
 """
 from langgraph.graph import StateGraph, END
 
@@ -8,8 +8,6 @@ from graphs.state import (
     GlobalState,
     GraphInput,
     GraphOutput,
-    InputProcessInput,
-    ASRInput,
     IntentRecognitionInput,
     KnowledgeQAInput,
     FeedbackInput,
@@ -22,11 +20,11 @@ from graphs.state import (
     SatisfiedInput,
     FallbackInput,
     CreateCaseInput,
-    ClearFallbackStateInput
+    ClearFallbackStateInput,
+    IntentRouteCheck,
+    CaseConfirmedCheck
 )
 
-from graphs.nodes.input_process_node import input_process_node
-from graphs.nodes.asr_node import asr_node
 from graphs.nodes.intent_recognition_node import intent_recognition_node
 from graphs.nodes.knowledge_qa_node import knowledge_qa_node
 from graphs.nodes.feedback_node import feedback_node
@@ -40,9 +38,50 @@ from graphs.nodes.satisfied_node import satisfied_node
 from graphs.nodes.fallback_node import fallback_node
 from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
-from graphs.nodes.cond_input_process_node import cond_input_process
-from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition
-from graphs.nodes.cond_fallback_node import cond_fallback
+
+
+# ==================== 条件判断函数 ====================
+
+def cond_intent_recognition(state: IntentRouteCheck) -> str:
+    """
+    title: 意图路由
+    desc: 根据意图识别结果，决定后续处理流程
+    """
+    intent = state.intent
+    
+    if intent == "usage_guidance":
+        return "使用指导"
+    elif intent == "fault_handling":
+        return "故障处理"
+    elif intent == "complaint":
+        return "兜底流程"
+    elif intent == "fallback":
+        return "兜底流程"
+    elif intent == "cancel_fallback":
+        return "退出兜底"
+    elif intent == "exit_fallback":
+        return "退出兜底"
+    elif intent == "dissatisfied":
+        return "不满意"
+    elif intent == "satisfied":
+        return "满意"
+    elif intent == "feedback_good":
+        return "评价反馈"
+    elif intent == "feedback_bad":
+        return "评价反馈"
+    else:
+        return "使用指导"
+
+
+def cond_fallback(state: CaseConfirmedCheck) -> str:
+    """
+    title: 工单确认判断
+    desc: 判断用户是否已确认问题总结，决定是否创建工单
+    """
+    if state.case_confirmed:
+        return "创建工单"
+    else:
+        return "继续兜底"
 
 
 # ==================== 主图编排 ====================
@@ -60,16 +99,6 @@ builder = StateGraph(
 builder.add_node(
     "load_history",
     load_history_node,
-    metadata={"type": "task"}
-)
-
-# 输入预处理
-builder.add_node("input_process", input_process_node)
-
-# ASR 语音转文字
-builder.add_node(
-    "asr",
-    asr_node,
     metadata={"type": "task"}
 )
 
@@ -145,21 +174,21 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
-# 兜底流程（新增）
+# 兜底流程
 builder.add_node(
     "fallback",
     fallback_node,
     metadata={"type": "task"}
 )
 
-# 创建工单（新增）
+# 创建工单
 builder.add_node(
     "create_case",
     create_case_node,
     metadata={"type": "task"}
 )
 
-# 清除兜底状态（新增）
+# 清除兜底状态
 builder.add_node(
     "clear_fallback_state",
     clear_fallback_state_node,
@@ -172,21 +201,8 @@ builder.set_entry_point("load_history")
 
 # ==================== 添加边 ====================
 
-# 加载历史 → 输入处理
-builder.add_edge("load_history", "input_process")
-
-# 语音输入判断
-builder.add_conditional_edges(
-    source="input_process",
-    path=cond_input_process,
-    path_map={
-        "语音处理": "asr",
-        "直接处理文字": "intent_recognition"
-    }
-)
-
-# ASR → 意图识别
-builder.add_edge("asr", "intent_recognition")
+# 加载历史 → 意图识别（去掉 input_process 和语音处理）
+builder.add_edge("load_history", "intent_recognition")
 
 # 意图路由
 builder.add_conditional_edges(
