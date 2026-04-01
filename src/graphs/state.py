@@ -110,19 +110,6 @@ class SaveRecordOutput(BaseModel):
     saved: bool = Field(default=True, description="是否保存成功")
 
 
-# ==================== 信息收集节点 ====================
-
-class InfoCollectionInput(BaseModel):
-    """信息收集节点的输入"""
-    user_message: str = Field(..., description="用户发送的消息")
-
-
-class InfoCollectionOutput(BaseModel):
-    """信息收集节点的输出"""
-    user_info: Dict[str, str] = Field(..., description="收集的用户信息")
-    reply_content: str = Field(..., description="回复内容（提示用户已收到反馈）")
-
-
 # ==================== 邮件发送节点 ====================
 
 class EmailSendingInput(BaseModel):

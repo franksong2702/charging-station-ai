@@ -11,7 +11,6 @@ from graphs.state import (
     IntentRecognitionInput,
     KnowledgeQAInput,
     FeedbackInput,
-    InfoCollectionInput,
     EmailSendingInput,
     LoadHistoryInput,
     SaveHistoryInput,
@@ -28,7 +27,6 @@ from graphs.state import (
 from graphs.nodes.intent_recognition_node import intent_recognition_node
 from graphs.nodes.knowledge_qa_node import knowledge_qa_node
 from graphs.nodes.feedback_node import feedback_node
-from graphs.nodes.info_collection_node import info_collection_node
 from graphs.nodes.email_sending_node import email_sending_node
 from graphs.nodes.load_history_node import load_history_node
 from graphs.nodes.save_history_node import save_history_node
@@ -129,16 +127,6 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
-# 投诉信息收集（保留，用于投诉兜底场景）
-builder.add_node(
-    "info_collection",
-    info_collection_node,
-    metadata={
-        "type": "agent",
-        "llm_cfg": "config/info_collection_llm_cfg.json"
-    }
-)
-
 # 邮件发送
 builder.add_node(
     "email_sending",
@@ -201,7 +189,7 @@ builder.set_entry_point("load_history")
 
 # ==================== 添加边 ====================
 
-# 加载历史 → 意图识别（去掉 input_process 和语音处理）
+# 加载历史 → 意图识别
 builder.add_edge("load_history", "intent_recognition")
 
 # 意图路由
@@ -249,9 +237,6 @@ builder.add_edge("email_sending", END)
 
 # 退出兜底 → 清除状态 → 知识库问答
 builder.add_edge("clear_fallback_state", "knowledge_qa")
-
-# 投诉兜底流程（保留旧流程兼容）
-builder.add_edge("info_collection", "email_sending")
 
 # ==================== 编译图 ====================
 
