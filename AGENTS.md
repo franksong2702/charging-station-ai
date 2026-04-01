@@ -27,9 +27,9 @@
 ### 条件节点
 | 节点名 | 文件位置 | 输入类型 | 功能描述 | 分支逻辑 |
 |-------|---------|---------|---------|---------|
-| cond_input_process | `graph.py` | VoiceInputCheck | 判断是否有语音输入 | "语音处理"→asr, "直接处理文字"→intent_recognition |
-| cond_intent_recognition | `graph.py` | IntentRouteCheck | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback, "退出兜底"→clear_fallback_state→knowledge_qa |
-| cond_fallback | `graph.py` | CaseConfirmedCheck | 工单确认判断 | "创建工单"→create_case, "继续兜底"→save_history |
+| cond_input_process | `nodes/cond_input_process_node.py` | VoiceInputCheck | 判断是否有语音输入 | "语音处理"→asr, "直接处理文字"→intent_recognition |
+| cond_intent_recognition | `nodes/cond_intent_recognition_node.py` | IntentRouteCheck | 意图路由 | "使用指导"/"故障处理"→knowledge_qa, "兜底流程"→fallback, "不满意"→dissatisfied, "满意"→satisfied, "评价反馈"→feedback, "退出兜底"→clear_fallback_state→knowledge_qa |
+| cond_fallback | `nodes/cond_fallback_node.py` | CaseConfirmedCheck | 工单确认判断 | "创建工单"→create_case, "继续兜底"→save_history |
 
 ## 子图清单
 无

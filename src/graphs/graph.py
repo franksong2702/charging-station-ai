@@ -3,8 +3,6 @@
 支持文字和语音输入，支持评价机制，支持多轮对话，支持兜底流程和工单创建
 """
 from langgraph.graph import StateGraph, END
-from langchain_core.runnables import RunnableConfig
-from langgraph.runtime import Runtime
 
 from graphs.state import (
     GlobalState,
@@ -24,10 +22,7 @@ from graphs.state import (
     SatisfiedInput,
     FallbackInput,
     CreateCaseInput,
-    ClearFallbackStateInput,
-    VoiceInputCheck,
-    IntentRouteCheck,
-    CaseConfirmedCheck
+    ClearFallbackStateInput
 )
 
 from graphs.nodes.input_process_node import input_process_node
@@ -45,61 +40,9 @@ from graphs.nodes.satisfied_node import satisfied_node
 from graphs.nodes.fallback_node import fallback_node
 from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
-
-
-# ==================== 条件判断函数 ====================
-
-def cond_input_process(state: VoiceInputCheck) -> str:
-    """
-    title: 语音输入判断
-    desc: 判断是否有语音输入，决定是否需要 ASR 处理
-    """
-    if state.voice_url and state.voice_url.strip():
-        return "语音处理"
-    else:
-        return "直接处理文字"
-
-
-def cond_intent_recognition(state: IntentRouteCheck) -> str:
-    """
-    title: 意图路由
-    desc: 根据意图识别结果，决定后续处理流程
-    """
-    intent = state.intent
-    
-    if intent == "usage_guidance":
-        return "使用指导"
-    elif intent == "fault_handling":
-        return "故障处理"
-    elif intent == "complaint":
-        return "兜底流程"
-    elif intent == "fallback":
-        return "兜底流程"
-    elif intent == "cancel_fallback":
-        return "退出兜底"
-    elif intent == "exit_fallback":
-        return "退出兜底"
-    elif intent == "dissatisfied":
-        return "不满意"
-    elif intent == "satisfied":
-        return "满意"
-    elif intent == "feedback_good":
-        return "评价反馈"
-    elif intent == "feedback_bad":
-        return "评价反馈"
-    else:
-        return "使用指导"
-
-
-def cond_fallback(state: CaseConfirmedCheck) -> str:
-    """
-    title: 工单确认判断
-    desc: 判断用户是否已确认问题总结，决定是否创建工单
-    """
-    if state.case_confirmed:
-        return "创建工单"
-    else:
-        return "继续兜底"
+from graphs.nodes.cond_input_process_node import cond_input_process
+from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition
+from graphs.nodes.cond_fallback_node import cond_fallback
 
 
 # ==================== 主图编排 ====================
