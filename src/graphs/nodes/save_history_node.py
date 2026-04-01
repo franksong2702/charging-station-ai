@@ -41,14 +41,16 @@ def save_history_node(
         }
         
         # 如果有兜底流程状态，也保存进去
-        if state.fallback_phase:
+        # 注意：如果 fallback_phase = "done"，表示兜底已完成，不保存兜底状态
+        # 这样下次用户来对话时就是新会话
+        if state.fallback_phase and state.fallback_phase != "done":
             insert_data["fallback_phase"] = state.fallback_phase
-        if state.phone:
-            insert_data["phone"] = state.phone
-        if state.license_plate:
-            insert_data["license_plate"] = state.license_plate
-        if state.problem_summary:
-            insert_data["problem_summary"] = state.problem_summary
+            if state.phone:
+                insert_data["phone"] = state.phone
+            if state.license_plate:
+                insert_data["license_plate"] = state.license_plate
+            if state.problem_summary:
+                insert_data["problem_summary"] = state.problem_summary
         
         # 插入对话记录
         client.table("conversation_history").insert(insert_data).execute()

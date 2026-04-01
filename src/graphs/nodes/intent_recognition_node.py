@@ -33,8 +33,9 @@ def intent_recognition_node(
     user_message = state.user_message.strip()
     
     # ==================== 检查是否在兜底流程中 ====================
-    # 如果 fallback_phase 不为空，需要判断用户是想继续兜底还是问新问题
-    if state.fallback_phase:
+    # 只有 collect_info 和 confirm 状态才算"正在兜底流程中"
+    # done 状态或空状态都算新会话，正常识别意图
+    if state.fallback_phase in ["collect_info", "confirm"]:
         # 1. 检查是否是取消兜底
         cancel_keywords = ["取消", "不用了", "算了", "不需要了", "不用管了", "没事了", "不要了", "不麻烦了"]
         for keyword in cancel_keywords:
@@ -74,8 +75,8 @@ def intent_recognition_node(
             # 用户在问新问题，退出兜底流程
             return IntentRecognitionOutput(intent="exit_fallback")
         
-        # 4. 其他情况继续兜底流程
-        return IntentRecognitionOutput(intent="fallback")
+        # 4. 其他情况（如普通问候"你好"），退出兜底流程，走正常意图识别
+        return IntentRecognitionOutput(intent="exit_fallback")
     
     # ==================== 优先判断特殊意图 ====================
     
