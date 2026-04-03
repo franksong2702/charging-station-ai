@@ -192,6 +192,7 @@ class SaveHistoryInput(BaseModel):
     license_plate: str = Field(default="", description="用户车牌号")
     problem_summary: str = Field(default="", description="问题总结")
     entry_problem: str = Field(default="", description="用户问题描述")
+    user_supplement: str = Field(default="", description="用户补充内容")
 
 
 class SaveHistoryOutput(BaseModel):

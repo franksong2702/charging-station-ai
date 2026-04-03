@@ -56,6 +56,8 @@ def save_history_node(
                 insert_data["problem_summary"] = state.problem_summary
             if state.entry_problem:
                 insert_data["entry_problem"] = state.entry_problem
+            if state.user_supplement:
+                insert_data["user_supplement"] = state.user_supplement
         
         # 插入对话记录
         client.table("conversation_history").insert(insert_data).execute()
