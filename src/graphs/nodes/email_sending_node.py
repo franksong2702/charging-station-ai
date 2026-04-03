@@ -43,22 +43,38 @@ def get_smtp_config() -> Dict[str, Any]:
 
 def get_recipient_config() -> Dict[str, Any]:
     """
-    获取收件邮箱配置
+    获取收件邮箱配置（支持多个邮箱）
     
     优先级：环境变量 > 配置文件 > 默认值
     
     环境变量：
-    - EMAIL_RECIPIENT: 收件邮箱地址
+    - EMAIL_RECIPIENT: 收件邮箱地址（多个邮箱用逗号分隔）
     - EMAIL_RECIPIENT_NAME: 收件人名称
+    - EMAIL_RECIPIENT_2: 第二个收件邮箱地址（可选，向后兼容）
     """
     # 优先使用环境变量
     env_recipient_email = os.getenv("EMAIL_RECIPIENT")
+    env_recipient_email_2 = os.getenv("EMAIL_RECIPIENT_2")  # 第二个邮箱（可选）
     env_recipient_name = os.getenv("EMAIL_RECIPIENT_NAME")
     
+    recipient_emails = []
+    
+    # 解析主邮箱（支持逗号分隔多个邮箱）
     if env_recipient_email:
-        logger.info(f"使用环境变量配置的收件邮箱: {env_recipient_email}")
+        # 支持多个邮箱用逗号分隔
+        email_list = [email.strip() for email in env_recipient_email.split(",") if email.strip()]
+        recipient_emails.extend(email_list)
+        logger.info(f"使用环境变量配置的主邮箱: {env_recipient_email}")
+    
+    # 解析第二个邮箱（向后兼容）
+    if env_recipient_email_2:
+        recipient_emails.append(env_recipient_email_2.strip())
+        logger.info(f"使用环境变量配置的第二个邮箱: {env_recipient_email_2}")
+    
+    # 如果有邮箱配置，返回
+    if recipient_emails:
         return {
-            "recipient_email": env_recipient_email,
+            "recipient_emails": recipient_emails,
             "recipient_name": env_recipient_name or "客服团队"
         }
     
@@ -67,8 +83,19 @@ def get_recipient_config() -> Dict[str, Any]:
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-            logger.info(f"使用配置文件的收件邮箱: {config.get('recipient_email')}")
-            return config
+            # 支持配置文件中的多个邮箱
+            if "recipient_emails" in config:
+                recipient_emails = config.get("recipient_emails", [])
+                logger.info(f"使用配置文件的收件邮箱列表: {recipient_emails}")
+            elif "recipient_email" in config:
+                recipient_emails = [config.get("recipient_email")]
+                logger.info(f"使用配置文件的收件邮箱: {config.get('recipient_email')}")
+            
+            if recipient_emails:
+                return {
+                    "recipient_emails": recipient_emails,
+                    "recipient_name": config.get("recipient_name", "客服团队")
+                }
     except FileNotFoundError:
         logger.warning(f"邮件配置文件不存在: {config_path}，使用默认配置")
     except json.JSONDecodeError as e:
@@ -76,7 +103,7 @@ def get_recipient_config() -> Dict[str, Any]:
     
     # 默认配置
     return {
-        "recipient_email": "xuefu.song@qq.com",
+        "recipient_emails": ["xuefu.song@qq.com"],
         "recipient_name": "充电桩客服团队"
     }
 
@@ -85,15 +112,15 @@ def get_recipient_config() -> Dict[str, Any]:
 def send_complaint_email(
     subject: str,
     content: str,
-    to_addr: str
+    to_addrs: list
 ) -> Dict[str, Any]:
     """
-    发送投诉信息邮件（支持重试，自动选择连接模式）
+    发送投诉信息邮件（支持重试，自动选择连接模式，支持多个收件人）
     
     Args:
         subject: 邮件主题
         content: 邮件正文（HTML格式）
-        to_addr: 收件人邮箱
+        to_addrs: 收件人邮箱列表
         
     Returns:
         发送结果字典，包含状态和消息
@@ -104,11 +131,12 @@ def send_complaint_email(
         smtp_port = smtp_config["smtp_port"]
         
         logger.info(f"邮件配置 - 服务器: {smtp_server}, 端口: {smtp_port}")
+        logger.info(f"收件人列表: {to_addrs}")
         
         # 创建邮件消息
         msg = MIMEText(content, "html", "utf-8")
         msg["From"] = formataddr(("充电桩智能客服", smtp_config["account"]))
-        msg["To"] = to_addr
+        msg["To"] = ", ".join(to_addrs)  # 多个收件人用逗号分隔
         msg["Subject"] = Header(subject, "utf-8")
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()
@@ -139,7 +167,7 @@ def send_complaint_email(
                     ) as server:
                         server.ehlo()
                         server.login(smtp_config["account"], smtp_config["auth_code"])
-                        server.sendmail(smtp_config["account"], [to_addr], msg.as_string())
+                        server.sendmail(smtp_config["account"], to_addrs, msg.as_string())
                 else:
                     # STARTTLS模式（端口587等）
                     logger.info(f"使用STARTTLS模式连接 {smtp_server}:{smtp_port}")
@@ -152,13 +180,14 @@ def send_complaint_email(
                         server.starttls(context=ctx)
                         server.ehlo()
                         server.login(smtp_config["account"], smtp_config["auth_code"])
-                        server.sendmail(smtp_config["account"], [to_addr], msg.as_string())
+                        server.sendmail(smtp_config["account"], to_addrs, msg.as_string())
                 
-                logger.info(f"邮件发送成功 - 收件人: {to_addr}")
+                logger.info(f"邮件发送成功 - 收件人: {', '.join(to_addrs)}")
                 return {
                     "status": "success",
-                    "message": f"邮件已成功发送至 {to_addr}",
-                    "attempts": attempt
+                    "message": f"邮件已成功发送至 {', '.join(to_addrs)}",
+                    "attempts": attempt,
+                    "recipients": to_addrs
                 }
                 
             except (
@@ -185,29 +214,30 @@ def send_complaint_email(
             return {
                 "status": "error",
                 "message": "发送失败，已重试3次",
-                "detail": str(last_err)
+                "detail": str(last_err),
+                "recipients": to_addrs
             }
         
-        return {"status": "error", "message": "发送失败: 未知错误"}
+        return {"status": "error", "message": "发送失败: 未知错误", "recipients": to_addrs}
         
     except smtplib.SMTPAuthenticationError as e:
         logger.error(f"邮件认证失败: {str(e)}")
-        return {"status": "error", "message": f"认证失败: {str(e)}"}
+        return {"status": "error", "message": f"认证失败: {str(e)}", "recipients": to_addrs}
     except smtplib.SMTPRecipientsRefused as e:
         logger.error(f"收件人被拒绝: {str(e)}")
-        return {"status": "error", "message": "收件人被拒绝"}
+        return {"status": "error", "message": "收件人被拒绝", "recipients": to_addrs}
     except smtplib.SMTPSenderRefused as e:
         logger.error(f"发件人被拒绝: {str(e)}")
-        return {"status": "error", "message": f"发件人被拒绝"}
+        return {"status": "error", "message": f"发件人被拒绝", "recipients": to_addrs}
     except smtplib.SMTPDataError as e:
         logger.error(f"数据被拒绝: {str(e)}")
-        return {"status": "error", "message": f"数据被拒绝"}
+        return {"status": "error", "message": f"数据被拒绝", "recipients": to_addrs}
     except smtplib.SMTPConnectError as e:
         logger.error(f"连接失败: {str(e)}")
-        return {"status": "error", "message": f"连接失败"}
+        return {"status": "error", "message": f"连接失败", "recipients": to_addrs}
     except Exception as e:
         logger.error(f"邮件发送异常: {str(e)}")
-        return {"status": "error", "message": f"发送失败: {str(e)}"}
+        return {"status": "error", "message": f"发送失败: {str(e)}", "recipients": to_addrs}
 
 
 def email_sending_node(
@@ -225,10 +255,10 @@ def email_sending_node(
     
     # 获取收件邮箱配置
     recipient_config = get_recipient_config()
-    recipient_email = recipient_config.get("recipient_email", "xuefu.song@qq.com")
+    recipient_emails = recipient_config.get("recipient_emails", ["xuefu.song@qq.com"])
     recipient_name = recipient_config.get("recipient_name", "充电桩客服团队")
     
-    logger.info(f"邮件发送节点 - 收件人: {recipient_name} <{recipient_email}>")
+    logger.info(f"邮件发送节点 - 收件人: {recipient_name}, 邮箱列表: {recipient_emails}")
     
     # 优先使用新字段（兜底流程），兼容旧字段（投诉场景）
     phone = state.phone or state.user_info.get("phone", "未知")
@@ -322,11 +352,11 @@ def email_sending_node(
     </html>
     """
     
-    # 发送邮件（带重试）
+    # 发送邮件（带重试，支持多个收件人）
     result = send_complaint_email(
         subject=subject,
         content=html_content,
-        to_addr=recipient_email
+        to_addrs=recipient_emails
     )
     
     # 判断是否发送成功（用于内部日志）
