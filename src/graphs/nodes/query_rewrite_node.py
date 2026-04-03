@@ -35,6 +35,33 @@ def query_rewrite_node(
     user_message = state.user_message.strip()
     intent = state.intent
     
+    # ==================== 白名单：不需要改写的消息 ====================
+    # 对于问候语、闲聊、感谢等，直接使用原始消息，不进行改写
+    # 避免把"你好"改写成"测试消息 简短回答"这种问题
+    skip_rewrite_keywords = [
+        "你好", "您好", "哈喽", "hi", "hello",
+        "谢谢", "感谢", "多谢", "thanks", "thank",
+        "再见", "拜拜", "bye",
+        "哦", "嗯", "啊", "呀", "啦",
+        "测试", "test"
+    ]
+    
+    # 检查是否需要跳过改写
+    skip_rewrite = False
+    for keyword in skip_rewrite_keywords:
+        if keyword in user_message.lower():
+            skip_rewrite = True
+            logger.info(f"查询改写 - 检测到关键词 '{keyword}'，跳过改写，使用原始消息")
+            break
+    
+    # 如果消息太短（<5字符），也跳过改写
+    if len(user_message) < 5 and not skip_rewrite:
+        skip_rewrite = True
+        logger.info(f"查询改写 - 消息太短，跳过改写，使用原始消息: {user_message}")
+    
+    if skip_rewrite:
+        return QueryRewriteOutput(rewritten_query=user_message)
+    
     # ==================== 读取配置文件 ====================
     cfg_file = os.path.join(
         os.getenv("COZE_WORKSPACE_PATH", ""),
