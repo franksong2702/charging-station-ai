@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""
+知识库审核脚本 - 读取知识库文件并进行内容审核
+"""
+import pandas as pd
+import os
+from typing import List, Dict, Any
+
+def read_excel_file(file_path: str) -> pd.DataFrame:
+    """读取 Excel 文件"""
+    try:
+        df = pd.read_excel(file_path)
+        print(f"✅ 成功读取文件: {file_path}")
+        print(f"📊 共有 {len(df)} 条记录")
+        print(f"📋 列名: {list(df.columns)}")
+        return df
+    except Exception as e:
+        print(f"❌ 读取文件失败: {e}")
+        return None
+
+def classify_question(row: pd.Series) -> Dict[str, Any]:
+    """
+    根据审核原则对问题进行分类
+    
+    审核原则：
+    1. 知识性内容：通过描述性方式，能够不需要给用户提供进一步服务的
+    2. 兜底性内容：需要通过用户投诉，或者通过知识库回复无法解决用户问题的
+    """
+    question = str(row.get('问题', '')).strip()
+    answer = str(row.get('答案', '')).strip()
+    
+    # 兜底性内容关键词
+    fallback_keywords = [
+        '投诉', '退款', '赔偿', '损失', '投诉', '维权', '举报', '起诉',
+        '不满意', '差评', '投诉电话', '人工客服', '转人工', '客服介入',
+        '索赔', '投诉邮箱', '投诉渠道', '投诉部门', '监管', '投诉平台',
+        '退款失败', '无法退款', '扣款', '多扣', '乱扣', '费用争议',
+        '退费', '退款申请', '退款流程', '退款时间', '退款金额',
+        '押金', '保证金', '押金退还', '保证金退还',
+        '账单', '发票', '开票', '发票问题', '账单问题',
+        '账号', '账户', '登录', '注册', '密码', '绑定', '解绑',
+        '异常', '错误', '故障', '无法', '不能', '失败', '问题',
+        '损坏', '坏了', '维修', '报修', '售后', '理赔',
+        '联系客服', '客服处理', '客服解决', '专人处理',
+        '申请', '提交', '处理', '解决', '跟进', '反馈',
+        '查不到', '找不到', '无法查询', '无法获取',
+        '安全', '隐私', '泄露', '被盗', '冒用',
+        '法律', '律师', '诉讼', '仲裁', '调解',
+        '协商', '沟通', '协调', '解决问题', '处理问题',
+        '调查', '核实', '查证', '确认',
+        '超时', '等待', '延误', '拖延',
+        '不合理', '不公平', '不公正', '违规', '违法'
+    ]
+    
+    # 知识性内容关键词（正向）
+    knowledge_keywords = [
+        '怎么用', '如何使用', '使用方法', '操作步骤', '教程', '指南',
+        '在哪里', '位置', '地方', '地点', '怎么找', '怎么去',
+        '多少钱', '价格', '费用', '收费', '计费', '怎么算',
+        '需要什么', '要求', '条件', '准备', '材料',
+        '注意事项', '安全', '提醒', '警告', '说明',
+        '区别', '不同', '对比', '比较', '差异',
+        '是什么', '介绍', '说明', '解释', '定义', '概念',
+        '有哪些', '种类', '类型', '分类', '列表',
+        '时间', '多久', '多长时间', '需要多久',
+        '可以吗', '能否', '是否', '能不能',
+        '为什么', '原因', '因为', '由于',
+        '怎么办', '怎么处理', '怎么解决', '方法', '办法',
+        '步骤', '流程', '过程', '程序',
+        '功能', '作用', '用途', '特点', '特性',
+        '优势', '缺点', '好处', '坏处',
+        '品牌', '型号', '规格', '参数',
+        '安装', '设置', '配置', '调试',
+        '充电', '使用', '扫码', '启动', '停止',
+        '会员', '优惠', '活动', '折扣',
+        '天气', '雨天', '雪天', '高温', '低温',
+        '车内', '有人', '没人', '安全',
+        '锁枪', '解锁', '拔枪', '插枪',
+        '指示灯', '显示', '屏幕', '黑屏',
+        '功率', '速度', '快慢', '时间',
+        '占位', '超时', '费用', '罚款',
+        '小程序', 'App', '软件', '应用',
+        '华为', '特斯拉', '蔚来', '比亚迪', '特来电',
+        '星星充电', '国家电网', '小桔充电', '云快充',
+        '换电', '换电站', '换电方法'
+    ]
+    
+    is_fallback = False
+    is_knowledge = False
+    reasons = []
+    
+    # 检查兜底关键词
+    for keyword in fallback_keywords:
+        if keyword in question or keyword in answer:
+            is_fallback = True
+            reasons.append(f"包含兜底关键词: '{keyword}'")
+            break
+    
+    # 检查知识性关键词
+    for keyword in knowledge_keywords:
+        if keyword in question:
+            is_knowledge = True
+            reasons.append(f"包含知识关键词: '{keyword}'")
+            break
+    
+    # 特殊规则判断
+    # 1. 如果问题明确需要客服介入 = 兜底
+    if any(kw in question for kw in ['转人工', '联系客服', '人工客服', '投诉', '赔偿']):
+        is_fallback = True
+        reasons.append("明确需要客服介入")
+    
+    # 2. 如果问题是关于操作指引、位置、价格 = 知识性
+    if any(kw in question for kw in ['怎么用', '在哪里', '多少钱', '步骤', '流程']):
+        is_knowledge = True
+        reasons.append("属于操作指引/信息查询类")
+    
+    # 3. 退款/押金/账单 = 兜底（需要人工处理）
+    if any(kw in question for kw in ['退款', '押金', '账单', '发票', '多扣', '扣款']):
+        is_fallback = True
+        reasons.append("涉及资金/账务问题，需要人工处理")
+    
+    # 最终分类
+    if is_fallback and not is_knowledge:
+        category = '兜底性内容'
+        color = '🔴'
+    elif is_knowledge and not is_fallback:
+        category = '知识性内容'
+        color = '🟢'
+    else:
+        # 两者都有，需要人工判断
+        category = '需要人工判断'
+        color = '🟡'
+    
+    return {
+        'question': question,
+        'answer': answer,
+        'category': category,
+        'color': color,
+        'reasons': reasons
+    }
+
+def main():
+    """主函数"""
+    file_path = '/workspace/projects/assets/知识库v1.1.xlsx'
+    
+    if not os.path.exists(file_path):
+        print(f"❌ 文件不存在: {file_path}")
+        return
+    
+    # 读取文件
+    df = read_excel_file(file_path)
+    if df is None:
+        return
+    
+    # 显示前几行预览
+    print("\n" + "="*80)
+    print("📄 数据预览（前10条）:")
+    print("="*80)
+    print(df.head(10).to_string())
+    
+    # 进行审核
+    print("\n" + "="*80)
+    print("🔍 开始内容审核...")
+    print("="*80)
+    
+    results = []
+    for idx, row in df.iterrows():
+        result = classify_question(row)
+        results.append(result)
+    
+    # 统计结果
+    fallback_count = sum(1 for r in results if r['category'] == '兜底性内容')
+    knowledge_count = sum(1 for r in results if r['category'] == '知识性内容')
+    manual_count = sum(1 for r in results if r['category'] == '需要人工判断')
+    
+    print("\n" + "="*80)
+    print("📊 审核统计结果:")
+    print("="*80)
+    print(f"🟢 知识性内容: {knowledge_count} 条")
+    print(f"🔴 兜底性内容: {fallback_count} 条")
+    print(f"🟡 需要人工判断: {manual_count} 条")
+    print(f"📋 总计: {len(results)} 条")
+    
+    # 显示兜底性内容
+    if fallback_count > 0:
+        print("\n" + "="*80)
+        print("🔴 发现的兜底性内容（不应该放在知识库中）:")
+        print("="*80)
+        for r in results:
+            if r['category'] == '兜底性内容':
+                print(f"\n{r['color']} 问题: {r['question']}")
+                print(f"   答案: {r['answer'][:100]}..." if len(r['answer'])>100 else f"   答案: {r['answer']}")
+                print(f"   原因: {', '.join(r['reasons'])}")
+    
+    # 显示需要人工判断的内容
+    if manual_count > 0:
+        print("\n" + "="*80)
+        print("🟡 需要人工判断的内容:")
+        print("="*80)
+        for r in results:
+            if r['category'] == '需要人工判断':
+                print(f"\n{r['color']} 问题: {r['question']}")
+                print(f"   答案: {r['answer'][:100]}..." if len(r['answer'])>100 else f"   答案: {r['answer']}")
+                print(f"   原因: {', '.join(r['reasons'])}")
+    
+    # 保存详细结果到文件
+    output_file = '/workspace/projects/docs/知识库v1.1审核报告.md'
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("# 知识库v1.1 审核报告\n\n")
+        f.write(f"- 审核时间: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"- 总条目数: {len(results)}\n")
+        f.write(f"- 知识性内容: {knowledge_count} 条\n")
+        f.write(f"- 兜底性内容: {fallback_count} 条\n")
+        f.write(f"- 需要人工判断: {manual_count} 条\n\n")
+        
+        f.write("## 兜底性内容（不应该放在知识库中）\n\n")
+        for r in results:
+            if r['category'] == '兜底性内容':
+                f.write(f"### 问题: {r['question']}\n")
+                f.write(f"**答案**: {r['answer']}\n")
+                f.write(f"**原因**: {', '.join(r['reasons'])}\n\n")
+        
+        f.write("## 需要人工判断的内容\n\n")
+        for r in results:
+            if r['category'] == '需要人工判断':
+                f.write(f"### 问题: {r['question']}\n")
+                f.write(f"**答案**: {r['answer']}\n")
+                f.write(f"**原因**: {', '.join(r['reasons'])}\n\n")
+    
+    print(f"\n✅ 详细审核报告已保存到: {output_file}")
+
+if __name__ == '__main__':
+    main()
