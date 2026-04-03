@@ -294,14 +294,14 @@ def fallback_node(
             # 用户进入兜底流程时发送的消息通常就是问题描述
             # 检查当前消息是否包含实际问题描述
             has_problem_desc = any(kw in user_message for kw in ["充", "电", "优惠券", "扣", "结算", "故障", "问题", "退款", "钱"])
-            is_phone_plate_msg = "手机" in user_message or "车牌" in user_message
             
-            if has_problem_desc and not is_phone_plate_msg:
-                # 当前消息包含问题描述，直接使用
+            # ✅ 关键修复：只要包含问题描述，即使同时包含手机号/车牌号，也要提取问题描述！
+            if has_problem_desc:
+                # 当前消息包含问题描述，直接使用（即使同时包含手机号/车牌号）
                 entry_problem = user_message
                 logger.info(f"兜底流程 - 从当前消息提取问题描述: {entry_problem[:50]}...")
             else:
-                # 当前消息不包含问题描述（如纯情绪词或手机号/车牌号）
+                # 当前消息不包含问题描述（如纯情绪词或只有手机号/车牌号）
                 # 从对话历史中找到最近的问题描述
                 if state.conversation_history:
                     for msg in reversed(state.conversation_history):
