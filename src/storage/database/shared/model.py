@@ -17,20 +17,22 @@ class ConversationHistory(Base):
     __tablename__ = "conversation_history"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, comment="用户ID")
-    conversation_history: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, default=list, comment="对话历史记录")
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False, comment="用户身份标识")
+    user_message: Mapped[str] = mapped_column(Text, nullable=False, comment="用户发送的消息")
+    reply_content: Mapped[str] = mapped_column(Text, nullable=False, comment="AI回复内容")
+    intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="意图类型")
     fallback_phase: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="兜底流程阶段")
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="手机号")
+    license_plate: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="车牌号")
     problem_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="问题总结")
     entry_problem: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="进入兜底时的问题描述")
     user_supplement: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="用户补充信息")
-    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="手机号")
-    license_plate: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="车牌号")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
     
     __table_args__ = (
         Index("ix_conversation_history_user_id", "user_id"),
         Index("ix_conversation_history_created_at", "created_at"),
+        Index("ix_conversation_history_user_created", "user_id", "created_at"),
     )
 
 
