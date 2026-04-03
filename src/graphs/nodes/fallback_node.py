@@ -284,6 +284,11 @@ def fallback_node(
     
     # ==================== 阶段0：询问问题 ====================
     if phase == "" or phase == "ask_problem":
+        # 先从 state 中获取已有的信息（以防用户之前已经提供了手机号/车牌号）
+        phone = state.phone
+        license_plate = state.license_plate
+        entry_problem = state.entry_problem
+        
         # 刚进入兜底流程，先询问用户具体遇到了什么问题
         if phase == "":
             # 第一次进入，询问问题
@@ -293,11 +298,11 @@ def fallback_node(
             return FallbackOutput(
                 reply_content=reply_content,
                 fallback_phase="ask_problem",
-                phone="",
-                license_plate="",
+                phone=phone,
+                license_plate=license_plate,
                 problem_summary="",
                 user_supplement="",
-                entry_problem="",
+                entry_problem=entry_problem,
                 case_confirmed=False
             )
         else:
@@ -318,11 +323,11 @@ def fallback_node(
                 return FallbackOutput(
                     reply_content=reply_content,
                     fallback_phase="ask_problem",
-                    phone="",
-                    license_plate="",
+                    phone=phone,
+                    license_plate=license_plate,
                     problem_summary="",
                     user_supplement="",
-                    entry_problem="",
+                    entry_problem=entry_problem,
                     case_confirmed=False
                 )
     
