@@ -282,6 +282,50 @@ def fallback_node(
                 case_confirmed=False
             )
     
+    # ==================== 阶段0：询问问题 ====================
+    if phase == "" or phase == "ask_problem":
+        # 刚进入兜底流程，先询问用户具体遇到了什么问题
+        if phase == "":
+            # 第一次进入，询问问题
+            logger.info("兜底流程 - 刚进入，先询问用户具体问题")
+            reply_content = """好的，请问您具体遇到了什么问题呢？"""
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="ask_problem",
+                phone="",
+                license_plate="",
+                problem_summary="",
+                user_supplement="",
+                entry_problem="",
+                case_confirmed=False
+            )
+        else:
+            # 在 ask_problem 阶段，用户回复了问题描述
+            # 提取用户的问题描述
+            has_problem_desc = any(kw in user_message for kw in ["充", "电", "优惠券", "扣", "结算", "故障", "问题", "退款", "钱", "索赔", "起火", "烧毁", "投诉"])
+            
+            if has_problem_desc:
+                # 用户描述了问题，记录下来，进入收集信息阶段
+                entry_problem = user_message
+                logger.info(f"兜底流程 - 用户描述了问题，记录并进入收集信息: {entry_problem[:50]}...")
+                phase = "collect_info"
+            else:
+                # 用户没有描述清楚问题，继续询问
+                logger.info("兜底流程 - 用户没有描述清楚问题，继续询问")
+                reply_content = """不好意思，我没太听明白～麻烦您描述一下具体遇到了什么问题，比如充电故障、优惠券问题、退款问题等？"""
+                
+                return FallbackOutput(
+                    reply_content=reply_content,
+                    fallback_phase="ask_problem",
+                    phone="",
+                    license_plate="",
+                    problem_summary="",
+                    user_supplement="",
+                    entry_problem="",
+                    case_confirmed=False
+                )
+    
     # ==================== 阶段1：收集信息 ====================
     if phase == "collect_info":
         phone = state.phone

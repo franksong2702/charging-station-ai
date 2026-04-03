@@ -24,7 +24,7 @@ class GlobalState(BaseModel):
     need_feedback: bool = Field(default=False, description="是否需要请求用户评价")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录（用于多轮对话上下文）")
     # 兜底流程相关
-    fallback_phase: str = Field(default="", description="兜底流程阶段：collect_info/summarize/confirm/send")
+    fallback_phase: str = Field(default="", description="兜底流程阶段：ask_problem/collect_info/confirm/send")
     phone: str = Field(default="", description="用户手机号")
     license_plate: str = Field(default="", description="用户车牌号")
     problem_summary: str = Field(default="", description="问题总结（AI生成）")
