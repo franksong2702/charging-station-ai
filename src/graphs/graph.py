@@ -38,8 +38,8 @@ from graphs.nodes.satisfied_node import satisfied_node
 from graphs.nodes.fallback_node import fallback_node
 from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
-from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition
-from graphs.nodes.cond_fallback_node import cond_fallback
+from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition, cond_intent_recognition_path
+from graphs.nodes.cond_fallback_node import cond_fallback, cond_fallback_path
 
 
 # ==================== 主图编排 ====================
@@ -58,6 +58,20 @@ builder.add_node(
     "load_history",
     load_history_node,
     metadata={"type": "task"}
+)
+
+# 意图路由条件节点
+builder.add_node(
+    "cond_intent_recognition",
+    cond_intent_recognition,
+    metadata={"type": "condition"}
+)
+
+# 工单确认条件节点
+builder.add_node(
+    "cond_fallback",
+    cond_fallback,
+    metadata={"type": "condition"}
 )
 
 # 意图识别
@@ -165,7 +179,7 @@ builder.add_edge("load_history", "intent_recognition")
 # 意图路由
 builder.add_conditional_edges(
     source="intent_recognition",
-    path=cond_intent_recognition,
+    path=cond_intent_recognition_path,
     path_map={
         "使用指导": "query_rewrite",
         "故障处理": "query_rewrite",
@@ -197,7 +211,7 @@ builder.add_edge("satisfied", "save_record")
 # 兜底流程判断
 builder.add_conditional_edges(
     source="fallback",
-    path=cond_fallback,
+    path=cond_fallback_path,
     path_map={
         "创建工单": "create_case",
         "继续兜底": "save_history"
