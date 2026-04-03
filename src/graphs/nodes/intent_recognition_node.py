@@ -140,10 +140,17 @@ def intent_recognition_node(
     elif "差评" in intent_text or "没帮助" in intent_text:
         intent = "feedback_bad"
     
-    # 【关键逻辑】在兜底流程中，问新问题应该退出兜底
+    # 【关键逻辑】在兜底流程中，只有明确说"取消"、"退出"、"不需要了"才退出兜底
+    # 其他情况（用户纠正问题总结、补充信息等）继续兜底流程
     if state.fallback_phase:
-        if intent in ["usage_guidance", "fault_handling"]:
-            # 用户在兜底流程中问使用问题或故障问题，应该退出兜底
+        # 只有明确取消才退出兜底
+        exit_keywords = ["取消", "退出", "不需要了", "不用了", "算了", "不聊了", "再见"]
+        has_exit_keyword = any(kw in user_message for kw in exit_keywords)
+        
+        if has_exit_keyword:
             intent = "exit_fallback"
+        else:
+            # 其他情况继续兜底流程
+            intent = "fallback"
     
     return IntentRecognitionOutput(intent=intent)
