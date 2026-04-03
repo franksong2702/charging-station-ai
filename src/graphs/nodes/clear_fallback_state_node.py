@@ -7,13 +7,13 @@ import logging
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from postgrest.exceptions import APIError
 from jinja2 import Template
 from coze_coding_dev_sdk import LLMClient
 from langchain_core.messages import HumanMessage
 
 from graphs.state import ClearFallbackStateInput, ClearFallbackStateOutput
-from storage.database.supabase_client import get_supabase_client
+from storage.database.db import get_session
+from storage.database.shared.model import ConversationHistory
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def clear_fallback_state_node(
     """
     title: 清除兜底状态
     desc: 兜底流程完成后或用户退出兜底时，清除用户的兜底状态
-    integrations: Supabase
+    integrations: PostgreSQL
     """
     ctx = runtime.context
     
@@ -65,19 +65,23 @@ def clear_fallback_state_node(
         )
     
     try:
-        client = get_supabase_client()
+        session = get_session()
         
         # 保存一条空状态，覆盖之前的兜底状态
-        client.table("conversation_history").insert({
-            "user_id": state.user_id,
-            "user_message": state.user_message or "",
-            "reply_content": state.reply_content or "",
-            "intent": "",
-            "fallback_phase": "",  # 清空兜底状态
-            "phone": "",
-            "license_plate": "",
-            "problem_summary": ""
-        }).execute()
+        record = ConversationHistory(
+            user_id=state.user_id,
+            user_message=state.user_message or "",
+            reply_content=state.reply_content or "",
+            intent="",
+            fallback_phase="",  # 清空兜底状态
+            phone="",
+            license_plate="",
+            problem_summary=""
+        )
+        
+        session.add(record)
+        session.commit()
+        session.close()
         
         logger.info(f"已清除用户 {state.user_id} 的兜底状态，新意图: {new_intent}")
         return ClearFallbackStateOutput(

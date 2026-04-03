@@ -147,7 +147,7 @@ intent_recognition (意图识别)
 **优先级**：环境变量 > 配置文件 > 默认值
 - 知识库：`KnowledgeClient` (coze-coding-dev-sdk)
 - 邮件发送：`EmailClient` (coze-coding-dev-sdk)
-- 数据库：Supabase
+- 数据库：PostgreSQL
 
 ## 邮件配置
 

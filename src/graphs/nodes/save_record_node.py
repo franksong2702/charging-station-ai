@@ -1,5 +1,5 @@
 """
-对话记录保存节点 - 保存有价值的对话记录到 Supabase 数据库
+对话记录保存节点 - 保存有价值的对话记录到 PostgreSQL 数据库
 只保存：评价反馈、不满意场景（用于知识库优化）
 """
 import json
@@ -9,10 +9,10 @@ from typing import List, Dict, Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from postgrest.exceptions import APIError
 
 from graphs.state import SaveRecordInput, SaveRecordOutput
-from storage.database.supabase_client import get_supabase_client
+from storage.database.db import get_session
+from storage.database.shared.model import DialogRecord
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def save_record_node(
     """
     title: 对话记录保存
     desc: 只保存有价值的记录（评价/不满意），用于知识库优化和服务改进
-    integrations: Supabase
+    integrations: PostgreSQL
     """
     ctx = runtime.context
     
@@ -112,34 +112,33 @@ def save_record_node(
     
     # ==================== 保存到数据库 ====================
     try:
-        client = get_supabase_client()
+        session = get_session()
         
         # 构建插入数据
-        record_data = {
-            "user_id": state.user_id if state.user_id else None,
-            "user_message": state.user_message,
-            "reply_content": state.reply_content,
-            "intent": intent,
-            "feedback_type": feedback_type if feedback_type else None,
-            "knowledge_matched": len(state.knowledge_chunks) > 0,
-            "record_type": record_type,  # 新增：记录类型（评价反馈/不满意反馈/知识库缺失）
-            "knowledge_chunks": [{
+        record = DialogRecord(
+            user_id=state.user_id if state.user_id else None,
+            user_message=state.user_message,
+            reply_content=state.reply_content,
+            intent=intent,
+            feedback_type=feedback_type if feedback_type else None,
+            knowledge_matched=len(state.knowledge_chunks) > 0,
+            record_type=record_type,
+            knowledge_chunks=[{
                 "type": "feedback_context",
                 "original_question": original_question,
                 "original_answer": original_answer,
                 "dissatisfied_reason": state.user_message if intent == "dissatisfied" else None
             }]
-        }
+        )
         
         # 插入对话记录
-        client.table("dialog_records").insert(record_data).execute()
+        session.add(record)
+        session.commit()
+        session.close()
         
         logger.info(f"对话记录已保存到数据库")
         return SaveRecordOutput(saved=True)
         
-    except APIError as e:
-        logger.error(f"保存记录到数据库失败: {e.message}")
-        return SaveRecordOutput(saved=False)
     except Exception as e:
         logger.error(f"保存记录失败: {str(e)}")
         return SaveRecordOutput(saved=False)

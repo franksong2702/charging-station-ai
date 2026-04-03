@@ -6,10 +6,10 @@ from typing import Dict, Any, List, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from postgrest.exceptions import APIError
 
 from graphs.state import LoadHistoryInput, LoadHistoryOutput
-from storage.database.supabase_client import get_supabase_client
+from storage.database.db import get_session
+from storage.database.shared.model import ConversationHistory
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ def load_history_node(
     """
     title: 加载对话历史
     desc: 根据用户ID从数据库加载历史对话记录和兜底流程状态
-    integrations: Supabase
+    integrations: PostgreSQL
     """
     # 如果没有 user_id，返回空历史，但保留 GraphInput 中的兜底流程状态
     if not state.user_id:
@@ -40,32 +40,21 @@ def load_history_node(
         )
     
     try:
-        client = get_supabase_client()
+        session = get_session()
         
         # 查询最近 N 轮对话历史
         # 每轮对话包含用户消息和AI回复，所以需要 2 * MAX_HISTORY_ROUNDS 条记录
         limit = MAX_HISTORY_ROUNDS * 2
         
-        response = client.table("conversation_history") \
-            .select("user_message, reply_content, created_at, fallback_phase, phone, license_plate, problem_summary, entry_problem") \
-            .eq("user_id", state.user_id) \
-            .order("created_at", desc=True) \
+        records = session.query(ConversationHistory) \
+            .filter(ConversationHistory.user_id == state.user_id) \
+            .order_by(ConversationHistory.created_at.desc()) \
             .limit(limit) \
-            .execute()
+            .all()
         
-        # 检查响应数据
-        if response is None or not hasattr(response, 'data') or response.data is None:
-            return LoadHistoryOutput(
-                conversation_history=[],
-                fallback_phase="",
-                phone="",
-                license_plate="",
-                problem_summary="",
-                entry_problem=state.entry_problem
-            )
+        session.close()
         
-        data = response.data
-        if not isinstance(data, list) or len(data) == 0:
+        if not records:
             # 数据库无记录，使用 GraphInput 中的兜底流程状态
             return LoadHistoryOutput(
                 conversation_history=[],
@@ -80,19 +69,19 @@ def load_history_node(
         history: List[Dict[str, str]] = []
         
         # 从最新的记录中获取兜底流程状态
-        latest_record = data[0] if data else {}
+        latest_record = records[0] if records else None
         fallback_phase = ""
         phone = ""
         license_plate = ""
         problem_summary = ""
         entry_problem = ""
         
-        if isinstance(latest_record, dict):
-            fallback_phase = str(latest_record.get("fallback_phase") or "")
-            phone = str(latest_record.get("phone") or "")
-            license_plate = str(latest_record.get("license_plate") or "")
-            problem_summary = str(latest_record.get("problem_summary") or "")
-            entry_problem = str(latest_record.get("entry_problem") or "")
+        if latest_record:
+            fallback_phase = str(latest_record.fallback_phase or "")
+            phone = str(latest_record.phone or "")
+            license_plate = str(latest_record.license_plate or "")
+            problem_summary = str(latest_record.problem_summary or "")
+            entry_problem = str(latest_record.entry_problem or "")
         
         # 如果 GraphInput 中传入了兜底流程状态，优先使用（支持云函数传递状态）
         if state.fallback_phase:
@@ -106,12 +95,10 @@ def load_history_node(
         if state.entry_problem:
             entry_problem = state.entry_problem
         
-        # 构建对话历史
-        for record in reversed(data):
-            if not isinstance(record, dict):
-                continue
-            user_msg = record.get("user_message", "")
-            reply = record.get("reply_content", "")
+        # 构建对话历史（按时间正序）
+        for record in reversed(records):
+            user_msg = record.user_message or ""
+            reply = record.reply_content or ""
             if user_msg:
                 history.append({
                     "role": "user",
@@ -132,19 +119,8 @@ def load_history_node(
             entry_problem=entry_problem
         )
         
-    except APIError as e:
-        # 查询失败不影响主流程，记录错误并返回空历史
-        logger.error(f"加载对话历史失败 - APIError: {e}, 详情: {e.message if hasattr(e, 'message') else 'N/A'}")
-        return LoadHistoryOutput(
-            conversation_history=[],
-            fallback_phase=state.fallback_phase,
-            phone=state.phone,
-            license_plate=state.license_plate,
-            problem_summary=state.problem_summary,
-            entry_problem=state.entry_problem
-        )
     except Exception as e:
-        # 其他异常也不影响主流程，记录错误
+        # 查询失败不影响主流程，记录错误并返回空历史
         logger.error(f"加载对话历史失败 - Exception: {type(e).__name__}: {e}")
         return LoadHistoryOutput(
             conversation_history=[],
