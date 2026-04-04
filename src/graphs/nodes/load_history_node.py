@@ -89,16 +89,27 @@ def load_history_node(
             
             # 【新增：检查兜底流程状态是否过期
             if fallback_phase and latest_record.created_at:
-                # 计算时间差
-                time_diff = datetime.now() - latest_record.created_at
-                if time_diff > timedelta(minutes=FALLBACK_STATE_EXPIRE_MINUTES):
-                    # 超过 30 分钟，重置兜底流程状态
-                    logger.info(f"兜底流程状态已过期（{time_diff.total_seconds()/60:.1f}分钟），已重置")
-                    fallback_phase = ""
-                    phone = ""
-                    license_plate = ""
-                    problem_summary = ""
-                    entry_problem = ""
+                try:
+                    # 计算时间差 - 处理时区问题
+                    record_time = latest_record.created_at
+                    # 如果数据库时间带时区，转换为 naive（去掉时区）
+                    if record_time.tzinfo is not None:
+                        record_time = record_time.replace(tzinfo=None)
+                    # 当前时间也用 naive
+                    now_time = datetime.now()
+                    
+                    time_diff = now_time - record_time
+                    if time_diff > timedelta(minutes=FALLBACK_STATE_EXPIRE_MINUTES):
+                        # 超过 30 分钟，重置兜底流程状态
+                        logger.info(f"兜底流程状态已过期（{time_diff.total_seconds()/60:.1f}分钟），已重置")
+                        fallback_phase = ""
+                        phone = ""
+                        license_plate = ""
+                        problem_summary = ""
+                        entry_problem = ""
+                except Exception as e:
+                    # 时间计算出错，不影响主流程，记录日志即可
+                    logger.warning(f"检查兜底流程状态过期失败: {type(e).__name__}: {e}")
         
         # 如果 GraphInput 中传入了兜底流程状态，优先使用（支持云函数传递状态）
         if state.fallback_phase:
