@@ -1,6 +1,7 @@
 """
 兜底流程节点 - 处理需要人工介入的场景
 支持多轮确认：收集信息 → 生成总结 → 用户确认 → 创建工单
+使用 LLM 智能判断用户意图
 """
 import os
 import json
@@ -128,6 +129,127 @@ def _extract_info_by_regex(user_message: str) -> dict:
     
     logger.info(f"正则提取结果 - 手机号: {phone}, 车牌号: {license_plate}")
     return {"phone": phone, "license_plate": license_plate}
+
+
+def _classify_user_intent(
+    ctx,
+    user_message: str,
+    problem_summary: str,
+    conversation_history: list
+) -> dict:
+    """
+    使用 LLM 智能判断用户意图
+    
+    Args:
+        ctx: 上下文
+        user_message: 用户消息
+        problem_summary: 当前问题总结
+        conversation_history: 对话历史
+        
+    Returns:
+        {
+            "intent": "confirm|announce_correction|actual_correction|cancel|other",
+            "is_correction": bool,  # 是否是纠正（替换）还是补充（追加）
+            "reasoning": str  # 判断理由
+        }
+    """
+    try:
+        # 构建对话摘要
+        dialogue_text = ""
+        if conversation_history:
+            for msg in conversation_history[-10:]:
+                role = "用户" if msg.get("role") == "user" else "客服"
+                content = msg.get("content", "")
+                dialogue_text += f"{role}：{content}\n"
+        
+        prompt = f"""你是一个智能客服意图识别专家。当前场景是：用户的问题总结已经生成，需要判断用户的回复意图。
+
+【当前状态】
+- 用户看到的问题总结："{problem_summary}"
+- 用户回复："{user_message}"
+
+【对话历史】
+{dialogue_text if dialogue_text else "无"}
+
+【你的任务】
+判断用户是在：
+
+1. **confirm（确认）**：用户明确同意问题总结，准备提交工单
+   - 例如："确认"、"没问题"、"对的"、"准确"、"可以了"、"就这样"等
+   - 用户直接表示同意，没有提出任何异议
+
+2. **announce_correction（预告纠正）**：用户说要纠正/补充，但还没给出具体内容
+   - 例如："你说得不对"、"我还要补充"、"等一下"、"等等"、"我还想再说"等
+   - 用户表达否定意图，但没有给出具体的纠正内容
+
+3. **actual_correction（实际纠正）**：用户给出了具体的纠正或补充内容
+   - 例如："你说得不对，优惠券没有抵扣"、"不对，应该是充电失败了"、"我的问题是优惠券过期了"等
+   - 用户不仅表达否定，还给出了具体的实际问题描述
+
+4. **cancel（取消）**：用户不想继续处理，要取消工单
+   - 例如："算了不要了"、"取消"、"不用处理了"等
+   - 用户明确表示要退出流程
+
+5. **other（其他）**：无法归类为以上4种
+   - 用户说了一些无关的话或无法判断意图
+
+【输出格式】
+请返回JSON格式，包含以下字段：
+- intent: 意图类型（confirm/announce_correction/actual_correction/cancel/other）
+- is_correction: 是否是纠正（替换总结）还是补充（追加内容）
+- reasoning: 判断理由
+
+【重要规则】
+1. 优先判断是否为取消（cancel）
+2. 其次判断是否为确认（confirm）
+3. 然后判断是预告纠正还是实际纠正
+4. 如果用户的消息很短（<15字）且包含"不对"、"等一下"、"我还要"等，优先判断为预告纠正
+5. 如果用户的消息包含具体的实际问题描述（如优惠券、充电、计费、故障等），优先判断为实际纠正
+6. 区分"预告纠正"和"实际纠正"的关键：是否给出了具体的实际问题描述
+
+请直接返回JSON格式，不要其他说明：
+{{"intent": "...", "is_correction": true/false, "reasoning": "..."}}"""
+
+        client = LLMClient(ctx=ctx)
+        response = client.invoke(
+            messages=[HumanMessage(content=prompt)],
+            model="doubao-seed-1-8-251228",
+            temperature=0.1,
+            max_completion_tokens=200
+        )
+        
+        # 提取响应文本
+        content = response.content
+        if isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            content = " ".join(text_parts).strip()
+        else:
+            content = str(content).strip()
+        
+        # 清理可能的 markdown 代码块
+        json_str = content.strip()
+        if json_str.startswith("```"):
+            json_str = re.sub(r'^```json?\s*', '', json_str)
+            json_str = re.sub(r'\s*```$', '', json_str)
+        
+        result = json.loads(json_str)
+        
+        logger.info(f"LLM 意图判断结果: {result}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"LLM 意图判断失败: {e}")
+        # 失败时默认当作补充处理
+        return {
+            "intent": "other",
+            "is_correction": False,
+            "reasoning": f"LLM 调用失败，错误信息: {str(e)}"
+        }
 
 
 def _generate_problem_summary(
@@ -487,39 +609,70 @@ def fallback_node(
         user_supplement = state.user_supplement
         entry_problem = state.entry_problem
         
-        # 清理用户消息（去掉标点符号和空格，用于精确匹配）
-        cleaned_message = user_message.strip()
-        # 去掉中文和英文标点、空格
-        for char in "，。！？、；：""''！？.,;:!? ":
-            cleaned_message = cleaned_message.replace(char, "")
+        # 使用 LLM 判断用户的意图（确认、预告纠正、实际纠正、取消）
+        intent_result = _classify_user_intent(
+            ctx=ctx,
+            user_message=user_message,
+            problem_summary=problem_summary,
+            conversation_history=state.conversation_history
+        )
         
-        # ============== 第一层判断：否定词/继续补充词检测 ==============
-        # 先检测用户是否在否定或继续补充，如果是，绝对不确认
-        deny_keywords = [
-            "还没有", "还没", "没有", "不对", "错了", "等一下", "等等", 
-            "我还要", "我想再", "我想补充", "我还要补充", "我想再说", 
-            "我还想", "你说得不对", "你说的不对", "不是这样", "不是这个",
-            "还不行", "还不够", "还没完", "还没好", "等会", "等会儿"
-        ]
-        is_deny = any(kw in user_message for kw in deny_keywords)
+        intent = intent_result.get("intent", "")
+        logger.info(f"兜底流程 - LLM 判断用户意图: {intent} (消息: {user_message})")
         
-        if is_deny:
-            logger.info(f"兜底流程 - 检测到否定/继续补充词，不确认 (消息: {user_message})")
-            # 用户否定或继续补充，不应该确认
-            # 检测用户是否在纠正问题总结
-            correction_keywords = ["不对", "错了", "不对嘛", "搞错了", "根本就不对", "忽略", "漏掉", "没说", "没提到", "不是这个", "我的问题是"]
-            is_correction = any(kw in user_message for kw in correction_keywords)
+        # 根据意图处理
+        if intent == "confirm":
+            # 用户确认
+            logger.info("兜底流程 - 用户确认完成")
+            final_summary = problem_summary
+            if user_supplement:
+                final_summary = f"{problem_summary}\n\n用户补充：{user_supplement}"
             
-            if is_correction:
-                # 用户纠正，重新生成问题总结，以用户的纠正为准
+            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
+
+如有其他问题，随时可以问我。"""
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="done",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=final_summary,
+                user_supplement=user_supplement,
+                entry_problem=entry_problem,
+                case_confirmed=True
+            )
+        
+        elif intent == "announce_correction":
+            # 用户预告要纠正，还没给具体内容
+            logger.info("兜底流程 - 用户预告要纠正，引导继续说")
+            reply_content = """好的，请继续说～"""
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="confirm",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=problem_summary,
+                user_supplement=user_supplement,
+                entry_problem=entry_problem,
+                case_confirmed=False
+            )
+        
+        elif intent == "actual_correction":
+            # 用户实际给出了纠正内容
+            logger.info("兜底流程 - 用户实际纠正，更新问题总结")
+            
+            # 根据 LLM 返回的内容判断是纠正还是补充
+            if intent_result.get("is_correction", False):
+                # 纠正：替换问题总结
                 user_supplement = user_message
                 new_summary = _generate_problem_summary(
                     ctx, state.conversation_history, user_message, entry_problem
                 )
             else:
-                # 用户补充，追加到补充内容
+                # 补充：追加到补充内容
                 user_supplement = f"{user_supplement}\n{user_message}" if user_supplement else user_message
-                # 重新生成问题总结
                 new_summary = _generate_problem_summary(
                     ctx, state.conversation_history, user_supplement, entry_problem
                 )
@@ -544,62 +697,29 @@ def fallback_node(
                 case_confirmed=False
             )
         
-        # ============== 第二层判断：确认词检测 ==============
-        # 只有明确的确认词才确认
-        confirm_keywords = [
-            "确认", "确认无误", "没问题", "确认无误", "正确", "没错",
-            "准确", "OK", "ok", "对的", "确认了", "确认呀", "没问题了",
-            "没其他问题", "没其他问题了", "没有其他问题", "没有其他问题了",
-            "就这样", "可以了", "好的没问题", "是对的", "确认正确"
-        ]
-        # 精确匹配：检查清理后的消息是否完全等于某个确认词
-        is_confirm = cleaned_message in confirm_keywords
-        
-        if is_confirm:
-            logger.info(f"兜底流程 - 用户确认完成 (原始消息: {user_message}, 清理后: {cleaned_message})")
-            
-            # 整合用户补充内容
-            final_summary = problem_summary
-            if user_supplement:
-                final_summary = f"{problem_summary}\n\n用户补充：{user_supplement}"
-            
-            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
-
-如有其他问题，随时可以问我。"""
-            
+        elif intent == "cancel":
+            # 用户取消
+            logger.info("兜底流程 - 用户取消")
             return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="done",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=final_summary,
-                user_supplement=user_supplement,
-                entry_problem=entry_problem,
-                case_confirmed=True
+                reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
+                fallback_phase="",
+                phone="",
+                license_plate="",
+                problem_summary="",
+                user_supplement="",
+                entry_problem="",
+                case_confirmed=False
             )
         
-        # 用户有补充内容或纠正
-        logger.info(f"兜底流程 - 用户补充/纠正: {user_message}")
-        
-        # 检测用户是否在纠正问题总结
-        correction_keywords = ["不对", "错了", "不对嘛", "搞错了", "根本就不对", "忽略", "漏掉", "没说", "没提到", "不是这个", "我的问题是"]
-        is_correction = any(kw in user_message for kw in correction_keywords)
-        
-        if is_correction:
-            # 用户纠正，重新生成问题总结，以用户的纠正为准
-            user_supplement = user_message
-            new_summary = _generate_problem_summary(
-                ctx, state.conversation_history, user_message, entry_problem
-            )
         else:
-            # 用户补充，追加到补充内容
+            # 未知意图，当作补充处理
+            logger.warning(f"兜底流程 - 未知意图 {intent}，当作补充处理")
             user_supplement = f"{user_supplement}\n{user_message}" if user_supplement else user_message
-            # 重新生成问题总结
             new_summary = _generate_problem_summary(
                 ctx, state.conversation_history, user_supplement, entry_problem
             )
-        
-        reply_content = f"""好的，已更新问题总结：
+            
+            reply_content = f"""好的，已更新问题总结：
 
 ───────────
 **问题总结：**
@@ -607,17 +727,17 @@ def fallback_node(
 
 ───────────
 以上信息准确吗？准确的话回复"确认"，还需要补充的话请继续说～"""
-        
-        return FallbackOutput(
-            reply_content=reply_content,
-            fallback_phase="confirm",
-            phone=phone,
-            license_plate=license_plate,
-            problem_summary=new_summary,
-            user_supplement=user_supplement,
-            entry_problem=entry_problem,
-            case_confirmed=False
-        )
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="confirm",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=new_summary,
+                user_supplement=user_supplement,
+                entry_problem=entry_problem,
+                case_confirmed=False
+            )
     
     # ==================== 阶段3：已完成 ====================
     elif phase == "done":
