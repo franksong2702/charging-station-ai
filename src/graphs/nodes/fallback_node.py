@@ -250,7 +250,7 @@ def fallback_node(
             updated.append(f"车牌号 {license_plate}")
         if extracted_problem:
             problem_summary = extracted_problem
-            updated.append(f"问题 {problem_summary}")
+            updated.append(f"情况 {problem_summary}")
         
         # 检查是否有信息更新
         if updated:
@@ -265,7 +265,7 @@ def fallback_node(
 
 📱 手机号：{phone}
 🚗 车牌号：{license_plate}
-📝 问题：{problem_summary}
+📝 情况：{problem_summary}
 
 ───────────
 以上信息准确吗？准确的话回复"确认"，有误的话请告诉我～"""
@@ -289,16 +289,16 @@ def fallback_node(
         if not license_plate:
             missing.append("车牌号")
         if not problem_summary:
-            missing.append("问题描述")
+            missing.append("情况说明")
         
         # 首次进入，友好询问
         if not phone and not license_plate and not problem_summary and phase == "":
-            reply_content = """好的，我来帮您记录问题反馈给工作人员～
+            reply_content = """好的，我来帮您记录情况反馈给工作人员～
 
 方便告诉我：
 - 📱 您的手机号
 - 🚗 您的车牌号
-- 📝 遇到的问题
+- 📝 遇到的情况
 
 可以直接一起说，比如："手机13812345678，车牌沪A12345，充电桩坏了" """
             
