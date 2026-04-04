@@ -2,6 +2,7 @@
 加载对话历史节点 - 用于多轮对话上下文和兜底流程状态
 """
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # 最大保留的对话轮数（每轮包含用户消息和AI回复）
 MAX_HISTORY_ROUNDS = 10
+
+# 兜底流程状态过期时间（30分钟）
+FALLBACK_STATE_EXPIRE_MINUTES = 30
 
 
 def load_history_node(
@@ -82,6 +86,19 @@ def load_history_node(
             license_plate = str(latest_record.license_plate or "")
             problem_summary = str(latest_record.problem_summary or "")
             entry_problem = str(latest_record.entry_problem or "")
+            
+            # 【新增：检查兜底流程状态是否过期
+            if fallback_phase and latest_record.created_at:
+                # 计算时间差
+                time_diff = datetime.now() - latest_record.created_at
+                if time_diff > timedelta(minutes=FALLBACK_STATE_EXPIRE_MINUTES):
+                    # 超过 30 分钟，重置兜底流程状态
+                    logger.info(f"兜底流程状态已过期（{time_diff.total_seconds()/60:.1f}分钟），已重置")
+                    fallback_phase = ""
+                    phone = ""
+                    license_plate = ""
+                    problem_summary = ""
+                    entry_problem = ""
         
         # 如果 GraphInput 中传入了兜底流程状态，优先使用（支持云函数传递状态）
         if state.fallback_phase:
