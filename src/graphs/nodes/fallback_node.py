@@ -492,9 +492,60 @@ def fallback_node(
         # 去掉中文和英文标点、空格
         for char in "，。！？、；：""''！？.,;:!? ":
             cleaned_message = cleaned_message.replace(char, "")
+        
+        # ============== 第一层判断：否定词/继续补充词检测 ==============
+        # 先检测用户是否在否定或继续补充，如果是，绝对不确认
+        deny_keywords = [
+            "还没有", "还没", "没有", "不对", "错了", "等一下", "等等", 
+            "我还要", "我想再", "我想补充", "我还要补充", "我想再说", 
+            "我还想", "你说得不对", "你说的不对", "不是这样", "不是这个",
+            "还不行", "还不够", "还没完", "还没好", "等会", "等会儿"
+        ]
+        is_deny = any(kw in user_message for kw in deny_keywords)
+        
+        if is_deny:
+            logger.info(f"兜底流程 - 检测到否定/继续补充词，不确认 (消息: {user_message})")
+            # 用户否定或继续补充，不应该确认
+            # 检测用户是否在纠正问题总结
+            correction_keywords = ["不对", "错了", "不对嘛", "搞错了", "根本就不对", "忽略", "漏掉", "没说", "没提到", "不是这个", "我的问题是"]
+            is_correction = any(kw in user_message for kw in correction_keywords)
+            
+            if is_correction:
+                # 用户纠正，重新生成问题总结，以用户的纠正为准
+                user_supplement = user_message
+                new_summary = _generate_problem_summary(
+                    ctx, state.conversation_history, user_message, entry_problem
+                )
+            else:
+                # 用户补充，追加到补充内容
+                user_supplement = f"{user_supplement}\n{user_message}" if user_supplement else user_message
+                # 重新生成问题总结
+                new_summary = _generate_problem_summary(
+                    ctx, state.conversation_history, user_supplement, entry_problem
+                )
+            
+            reply_content = f"""好的，已更新问题总结：
 
-        # 检查用户是否确认（精确匹配，避免误判）
-        # 只认可用户明确表示确认的完整语句
+───────────
+**问题总结：**
+{new_summary}
+
+───────────
+以上信息准确吗？准确的话回复"确认"，还需要补充的话请继续说～"""
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="confirm",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=new_summary,
+                user_supplement=user_supplement,
+                entry_problem=entry_problem,
+                case_confirmed=False
+            )
+        
+        # ============== 第二层判断：确认词检测 ==============
+        # 只有明确的确认词才确认
         confirm_keywords = [
             "确认", "确认无误", "没问题", "确认无误", "正确", "没错",
             "准确", "OK", "ok", "对的", "确认了", "确认呀", "没问题了",
