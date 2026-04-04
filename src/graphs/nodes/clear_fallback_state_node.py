@@ -25,14 +25,14 @@ def _recognize_intent_for_exit(ctx, user_message: str, config: RunnableConfig) -
     """
     # 简单的意图识别（不依赖完整的 LLM 调用）
     user_message = user_message.strip()
-    
+
     # 故障关键词
-    fault_keywords = ["充不进去", "充不上", "充不进", "充不了", "充电失败", 
+    fault_keywords = ["充不进去", "充不上", "充不进", "充不了", "充电失败",
                       "拔不出来", "停不下来", "充电慢", "坏了", "故障"]
     for keyword in fault_keywords:
         if keyword in user_message:
             return "fault_handling"
-    
+
     # 默认返回使用指导
     return "usage_guidance"
 
@@ -48,25 +48,28 @@ def clear_fallback_state_node(
     integrations: PostgreSQL
     """
     ctx = runtime.context
-    
+
     # 识别用户的真实意图（用于后续处理）
     new_intent = _recognize_intent_for_exit(ctx, state.user_message or "", config)
-    
+
+    # 保存传入的 case_confirmed 值（用于路由判断）
+    was_case_confirmed = state.case_confirmed
+
     if not state.user_id:
-        logger.info("无用户ID，跳过清除状态")
+        logger.info("无用户 ID，跳过清除状态")
         return ClearFallbackStateOutput(
             cleared=True,
             fallback_phase="",
             phone="",
             license_plate="",
             problem_summary="",
-            case_confirmed=False,
+            case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
             intent=new_intent
         )
-    
+
     try:
         session = get_session()
-        
+
         # 保存一条空状态，覆盖之前的兜底状态
         # 如果 user_message 和 reply_content 为空，说明是兜底完成后的自动清除
         record = ConversationHistory(
@@ -81,30 +84,30 @@ def clear_fallback_state_node(
             entry_problem="",
             user_supplement=""
         )
-        
+
         session.add(record)
         session.commit()
         session.close()
-        
-        logger.info(f"已清除用户 {state.user_id} 的兜底状态，新意图: {new_intent}")
+
+        logger.info(f"已清除用户 {state.user_id} 的兜底状态，新意图：{new_intent}")
         return ClearFallbackStateOutput(
             cleared=True,
             fallback_phase="",
             phone="",
             license_plate="",
             problem_summary="",
-            case_confirmed=False,
+            case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
             intent=new_intent
         )
-        
+
     except Exception as e:
-        logger.error(f"清除兜底状态失败: {str(e)}")
+        logger.error(f"清除兜底状态失败：{str(e)}")
         return ClearFallbackStateOutput(
             cleared=False,
             fallback_phase="",
             phone="",
             license_plate="",
             problem_summary="",
-            case_confirmed=False,
+            case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
             intent=new_intent
         )

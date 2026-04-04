@@ -39,7 +39,7 @@ from graphs.nodes.fallback_node import fallback_node
 from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition, cond_intent_recognition_path
-from graphs.nodes.cond_fallback_node import cond_fallback, cond_fallback_path
+from graphs.nodes.cond_fallback_node import cond_fallback, cond_fallback_path, cond_clear_fallback_state_route, cond_clear_fallback_state_route_path
 
 
 # ==================== 主图编排 ====================
@@ -218,13 +218,22 @@ builder.add_conditional_edges(
     }
 )
 
-# 创建工单 → 清除兜底状态 → 邮件发送 → 结束
-builder.add_edge("create_case", "clear_fallback_state")
-builder.add_edge("clear_fallback_state", "email_sending")
-builder.add_edge("email_sending", END)
+# 创建工单 → 邮件发送 → 清除兜底状态 → 结束
+# 注意：必须先发送邮件，再清除状态，因为邮件发送需要手机号、车牌号等数据
+builder.add_edge("create_case", "email_sending")
+builder.add_edge("email_sending", "clear_fallback_state")
 
-# 退出兜底 → 清除状态 → 查询改写 → 知识库问答
-builder.add_edge("clear_fallback_state", "query_rewrite")
+# 清除兜底状态后的路由判断
+# - 如果是工单确认后触发的清除（case_confirmed=True），则结束
+# - 否则是用户退出兜底，继续处理用户消息
+builder.add_conditional_edges(
+    source="clear_fallback_state",
+    path=cond_clear_fallback_state_route_path,
+    path_map={
+        "end": END,
+        "query_rewrite": "query_rewrite"
+    }
+)
 
 # ==================== 编译图 ====================
 

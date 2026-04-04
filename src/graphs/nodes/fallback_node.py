@@ -487,25 +487,22 @@ def fallback_node(
         user_supplement = state.user_supplement
         entry_problem = state.entry_problem
         
-        # 清理用户消息（去掉标点符号，用于模糊匹配）
-        import string
+        # 清理用户消息（去掉标点符号和空格，用于精确匹配）
         cleaned_message = user_message.strip()
-        # 去掉中文和英文标点
-        for char in "，。！？、；：""''！？.,;:!?":
+        # 去掉中文和英文标点、空格
+        for char in "，。！？、；：""''！？.,;:!? ":
             cleaned_message = cleaned_message.replace(char, "")
-        
-        # 检查用户是否确认（支持"确认。"、"确认了"、"是"、"对的"等）
+
+        # 检查用户是否确认（精确匹配，避免误判）
+        # 只认可用户明确表示确认的完整语句
         confirm_keywords = [
-            "确认", "确认无误", "没问题", "是的", "对", "好的", "正确", "没错", 
-            "准确", "可以", "行", "OK", "ok", "嗯", "是的的", "对的",
+            "确认", "确认无误", "没问题", "确认无误", "正确", "没错",
+            "准确", "OK", "ok", "对的", "确认了", "确认呀", "没问题了",
             "没其他问题", "没其他问题了", "没有其他问题", "没有其他问题了",
-            "没事了", "没问题了", "就这样", "可以了", "行了", "好的没问题",
-            "确认了", "确认呀", "是对的", "是对", "是", "对呀", "好", "嗯嗯"
+            "就这样", "可以了", "好的没问题", "是对的", "确认正确"
         ]
-        # 模糊匹配：检查清理后的消息是否等于或在关键词列表中
-        is_confirm = cleaned_message in confirm_keywords or any(
-            cleaned_message.startswith(kw) or cleaned_message == kw for kw in confirm_keywords
-        )
+        # 精确匹配：检查清理后的消息是否完全等于某个确认词
+        is_confirm = cleaned_message in confirm_keywords
         
         if is_confirm:
             logger.info(f"兜底流程 - 用户确认完成 (原始消息: {user_message}, 清理后: {cleaned_message})")

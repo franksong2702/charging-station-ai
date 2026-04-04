@@ -14,7 +14,7 @@ class GlobalState(BaseModel):
     user_message: str = Field(default="", description="用户发送的消息")
     user_id: str = Field(default="", description="用户身份标识（企业微信 external_userid，用于多轮对话）")
     intent: str = Field(default="", description="识别的意图类型")
-    rewritten_query: str = Field(default="", description="LLM改写后的搜索词（更精准）")
+    rewritten_query: str = Field(default="", description="LLM 改写后的搜索词（更精准）")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
     knowledge_missed: bool = Field(default=False, description="知识库是否没有覆盖到这个问题（用于后续知识库扩充）")
     user_info: Dict[str, str] = Field(default={}, description="收集的用户信息（手机号、车牌号等）")
@@ -27,7 +27,7 @@ class GlobalState(BaseModel):
     fallback_phase: str = Field(default="", description="兜底流程阶段：ask_problem/collect_info/confirm/send")
     phone: str = Field(default="", description="用户手机号")
     license_plate: str = Field(default="", description="用户车牌号")
-    problem_summary: str = Field(default="", description="问题总结（AI生成）")
+    problem_summary: str = Field(default="", description="问题总结（AI 生成）")
     user_supplement: str = Field(default="", description="用户补充内容")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
@@ -87,7 +87,7 @@ class QueryRewriteOutput(BaseModel):
 class KnowledgeQAInput(BaseModel):
     """知识库问答节点的输入"""
     user_message: str = Field(..., description="用户发送的消息")
-    rewritten_query: str = Field(default="", description="LLM改写后的搜索词")
+    rewritten_query: str = Field(default="", description="LLM 改写后的搜索词")
     intent: str = Field(..., description="意图类型")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录（用于多轮对话上下文）")
 
@@ -96,7 +96,7 @@ class KnowledgeQAOutput(BaseModel):
     """知识库问答节点的输出"""
     reply_content: str = Field(..., description="回复给用户的内容")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
-    need_feedback: bool = Field(default=False, description="是否需要请求用户评价（由LLM智能判断）")
+    need_feedback: bool = Field(default=False, description="是否需要请求用户评价（由 LLM 智能判断）")
     knowledge_missed: bool = Field(default=False, description="知识库是否没有覆盖到这个问题（用于后续知识库扩充）")
 
 
@@ -119,7 +119,7 @@ class SaveRecordInput(BaseModel):
     """记录保存节点的输入"""
     user_id: str = Field(default="", description="用户身份标识（可选）")
     user_message: str = Field(default="", description="用户发送的消息")
-    reply_content: str = Field(default="", description="AI回复内容")
+    reply_content: str = Field(default="", description="AI 回复内容")
     intent: str = Field(default="", description="意图类型")
     feedback_type: str = Field(default="", description="评价类型")
     knowledge_chunks: List[Dict[str, Any]] = Field(default=[], description="知识库搜索结果")
@@ -143,7 +143,7 @@ class EmailSendingInput(BaseModel):
     phone: str = Field(default="", description="用户手机号")
     license_plate: str = Field(default="", description="用户车牌号")
     problem_summary: str = Field(default="", description="问题总结")
-    case_id: str = Field(default="", description="工单ID")
+    case_id: str = Field(default="", description="工单 ID")
     # 完整对话历史
     conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话记录（用户+AI）")
 
@@ -184,7 +184,7 @@ class SaveHistoryInput(BaseModel):
     """保存对话历史节点的输入"""
     user_id: str = Field(default="", description="用户身份标识（可选）")
     user_message: str = Field(default="", description="用户发送的消息")
-    reply_content: str = Field(default="", description="AI回复内容")
+    reply_content: str = Field(default="", description="AI 回复内容")
     intent: str = Field(default="", description="意图类型")
     # 兜底流程状态
     fallback_phase: str = Field(default="", description="兜底流程阶段")
@@ -267,7 +267,7 @@ class CreateCaseInput(BaseModel):
 class CreateCaseOutput(BaseModel):
     """创建工单节点的输出"""
     case_created: bool = Field(default=True, description="工单是否创建成功")
-    case_id: str = Field(default="", description="工单ID")
+    case_id: str = Field(default="", description="工单 ID")
 
 
 # ==================== 清除兜底状态节点 ====================
@@ -276,7 +276,8 @@ class ClearFallbackStateInput(BaseModel):
     """清除兜底状态节点的输入"""
     user_id: str = Field(default="", description="用户身份标识")
     user_message: str = Field(default="", description="用户消息")
-    reply_content: str = Field(default="", description="AI回复内容")
+    reply_content: str = Field(default="", description="AI 回复内容")
+    case_confirmed: bool = Field(default=False, description="是否已确认工单（用于路由判断）")
 
 
 class ClearFallbackStateOutput(BaseModel):
