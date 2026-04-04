@@ -208,13 +208,17 @@ builder.add_edge("dissatisfied", "save_record")
 # 满意 → 保存记录 → 结束
 builder.add_edge("satisfied", "save_record")
 
-# 兜底流程判断
+# ==================== 关键修改：兜底流程先保存历史，再判断 ====================
+# 兜底流程：先保存对话历史（不管是继续还是创建工单，都先保存）
+builder.add_edge("fallback", "save_history")
+
+# 保存历史后，再判断是创建工单还是继续兜底（继续就结束，创建工单就继续）
 builder.add_conditional_edges(
-    source="fallback",
+    source="save_history",
     path=cond_fallback_path,
     path_map={
         "创建工单": "create_case",
-        "继续兜底": "save_history"
+        "继续兜底": END
     }
 )
 
