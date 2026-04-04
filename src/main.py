@@ -22,6 +22,16 @@ from coze_coding_utils.log.config import LOG_LEVEL
 from coze_coding_utils.error.classifier import ErrorClassifier, classify_error
 from coze_coding_utils.helper.stream_runner import AgentStreamRunner, WorkflowStreamRunner,agent_stream_handler,workflow_stream_handler, RunOpt
 
+# 数据库相关导入
+from sqlalchemy import text, inspect
+from sqlalchemy.orm import Session
+from storage.database.db import get_session, get_engine
+from storage.database.shared.model import (
+    ConversationHistory,
+    DialogRecord,
+    CaseRecord
+)
+
 setup_logging(
     log_file=LOG_FILE,
     max_bytes=100 * 1024 * 1024, # 100MB
@@ -710,6 +720,258 @@ async def search_logs(
     except Exception as e:
         logger.error(f"搜索日志失败: {e}")
         raise HTTPException(status_code=500, detail=f"搜索日志失败: {str(e)}")
+
+
+# ==================== 数据库查询 API ====================
+
+def _model_to_dict(obj) -> Dict[str, Any]:
+    """
+    将 SQLAlchemy 模型对象转换为字典
+    """
+    result = {}
+    for column in obj.__table__.columns:
+        value = getattr(obj, column.name)
+        # 处理 datetime 等特殊类型
+        if hasattr(value, 'isoformat'):
+            result[column.name] = value.isoformat()
+        else:
+            result[column.name] = value
+    return result
+
+
+@app.get("/db/tables")
+async def get_db_tables():
+    """
+    获取数据库中的所有表名
+    """
+    try:
+        engine = get_engine()
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "tables": tables
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取数据库表列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数据库表列表失败: {str(e)}")
+
+
+@app.get("/db/query/{table_name}")
+async def query_table(
+    table_name: str,
+    limit: int = Query(100, ge=1, le=1000, description="返回行数限制"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    order_by: Optional[str] = Query(None, description="排序字段"),
+    order_dir: Optional[str] = Query("desc", description="排序方向: asc, desc")
+):
+    """
+    查询指定表的数据
+    
+    支持的表名: conversation_history, dialog_records, case_records
+    """
+    try:
+        session = get_session()
+        
+        # 映射表名到模型类
+        table_model_map = {
+            "conversation_history": ConversationHistory,
+            "dialog_records": DialogRecord,
+            "case_records": CaseRecord
+        }
+        
+        if table_name not in table_model_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的表名: {table_name}, 支持的表: {list(table_model_map.keys())}"
+            )
+        
+        model_class = table_model_map[table_name]
+        
+        # 构建查询
+        query = session.query(model_class)
+        
+        # 排序
+        if order_by:
+            column = getattr(model_class, order_by, None)
+            if column is not None:
+                if order_dir.lower() == "asc":
+                    query = query.order_by(column.asc())
+                else:
+                    query = query.order_by(column.desc())
+            else:
+                # 如果指定的排序字段不存在，使用默认的 created_at 排序
+                if hasattr(model_class, 'created_at'):
+                    query = query.order_by(model_class.created_at.desc())
+        else:
+            # 默认排序
+            if hasattr(model_class, 'created_at'):
+                query = query.order_by(model_class.created_at.desc())
+            elif hasattr(model_class, 'id'):
+                query = query.order_by(model_class.id.desc())
+        
+        # 分页
+        total = query.count()
+        records = query.offset(offset).limit(limit).all()
+        
+        # 转换为字典
+        results = [_model_to_dict(record) for record in records]
+        
+        session.close()
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "table": table_name,
+                "total": total,
+                "count": len(results),
+                "offset": offset,
+                "limit": limit,
+                "records": results
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询表 {table_name} 失败: {e}")
+        raise HTTPException(status_code=500, detail=f"查询表失败: {str(e)}")
+
+
+@app.get("/db/conversation_history/{user_id}")
+async def get_conversation_history(
+    user_id: str,
+    limit: int = Query(50, ge=1, le=200, description="返回行数限制")
+):
+    """
+    获取指定用户的对话历史
+    """
+    try:
+        session = get_session()
+        
+        records = session.query(ConversationHistory)\
+            .filter(ConversationHistory.user_id == user_id)\
+            .order_by(ConversationHistory.created_at.desc())\
+            .limit(limit)\
+            .all()
+        
+        results = [_model_to_dict(record) for record in records]
+        
+        session.close()
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "user_id": user_id,
+                "count": len(results),
+                "records": results
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取用户 {user_id} 的对话历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取对话历史失败: {str(e)}")
+
+
+@app.get("/db/dialog_records")
+async def get_dialog_records(
+    limit: int = Query(100, ge=1, le=500, description="返回行数限制"),
+    record_type: Optional[str] = Query(None, description="记录类型过滤: feedback, dissatisfied, satisfied")
+):
+    """
+    获取对话记录（评价、不满意等）
+    """
+    try:
+        session = get_session()
+        
+        query = session.query(DialogRecord)
+        
+        if record_type:
+            query = query.filter(DialogRecord.record_type == record_type)
+        
+        records = query.order_by(DialogRecord.created_at.desc())\
+            .limit(limit)\
+            .all()
+        
+        results = [_model_to_dict(record) for record in records]
+        
+        session.close()
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "record_type": record_type,
+                "count": len(results),
+                "records": results
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取对话记录失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取对话记录失败: {str(e)}")
+
+
+@app.post("/db/execute")
+async def execute_sql(request: Request):
+    """
+    执行自定义 SQL 查询（只读查询）
+    
+    注意：只允许执行 SELECT 查询
+    """
+    try:
+        body = await request.json()
+        sql = body.get("sql", "").strip()
+        
+        if not sql:
+            raise HTTPException(status_code=400, detail="请提供 SQL 语句")
+        
+        # 安全检查：只允许 SELECT 查询
+        sql_lower = sql.lower()
+        if not sql_lower.startswith("select"):
+            raise HTTPException(
+                status_code=400,
+                detail="只允许执行 SELECT 查询，禁止执行 INSERT/UPDATE/DELETE 等修改操作"
+            )
+        
+        session = get_session()
+        
+        # 执行查询
+        result = session.execute(text(sql))
+        columns = result.keys()
+        rows = result.fetchall()
+        
+        # 转换为字典列表
+        results = []
+        for row in rows:
+            row_dict = {}
+            for i, col in enumerate(columns):
+                value = row[i]
+                if hasattr(value, 'isoformat'):
+                    row_dict[col] = value.isoformat()
+                else:
+                    row_dict[col] = value
+            results.append(row_dict)
+        
+        session.close()
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "columns": list(columns),
+                "count": len(results),
+                "rows": results
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"执行 SQL 失败: {e}")
+        raise HTTPException(status_code=500, detail=f"执行 SQL 失败: {str(e)}")
 
 
 def parse_args():
