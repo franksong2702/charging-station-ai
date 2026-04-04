@@ -12,13 +12,12 @@ import os
 import json
 import logging
 import re
-from jinja2 import Template
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from coze_coding_dev_sdk import LLMClient
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from graphs.state import FallbackInput, FallbackOutput
 
@@ -105,14 +104,15 @@ def _extract_info_by_llm(
         license_plate = str(result.get("license_plate", "")).strip()
         problem = str(result.get("problem", "")).strip()
         
-        # 验证手机号格式
+        # 验证手机号格式（必须是11位）
         if phone and len(re.sub(r'\D', '', phone)) == 11:
             phone = re.sub(r'\D', '', phone)
         else:
             phone = ""
+            logger.warning(f"手机号格式错误（非11位）：{phone}")
         
-        # 验证车牌号格式（简单校验）
-        if license_plate and len(license_plate.replace(" ", "")) >= 7:
+        # 车牌号不验证格式，只要用户提供就记录，让用户确认即可
+        if license_plate:
             license_plate = license_plate.replace(" ", "").upper()
         else:
             license_plate = ""
