@@ -4,11 +4,12 @@ import json
 import threading
 import traceback
 import logging
-from typing import Any, Dict, Iterable, AsyncIterable, AsyncGenerator, Optional
+import os
+from typing import Any, Dict, Iterable, AsyncIterable, AsyncGenerator, Optional, List
 import cozeloop
 import uvicorn
 import time
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
@@ -479,6 +480,237 @@ async def health_check():
 @app.get(path="/graph_parameter")
 async def http_graph_inout_parameter(request: Request):
     return service.graph_inout_schema()
+
+
+def _read_log_file(file_path: str, lines: int = 100, offset: int = 0) -> List[str]:
+    """
+    读取日志文件的最后 N 行
+    
+    Args:
+        file_path: 日志文件路径
+        lines: 要读取的行数
+        offset: 偏移量（跳过最后多少行）
+    
+    Returns:
+        日志行列表
+    """
+    if not os.path.exists(file_path):
+        return []
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            all_lines = f.readlines()
+        
+        # 从末尾读取
+        start = max(0, len(all_lines) - lines - offset)
+        end = len(all_lines) - offset
+        return all_lines[start:end]
+    except Exception as e:
+        logger.error(f"读取日志文件失败: {e}")
+        return []
+
+
+def _parse_log_line(line: str) -> Dict[str, Any]:
+    """
+    尝试解析日志行为 JSON
+    
+    Args:
+        line: 日志行
+    
+    Returns:
+        解析后的字典，如果解析失败返回原始文本
+    """
+    line = line.strip()
+    if not line:
+        return {}
+    
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return {"raw": line}
+
+
+def _filter_logs(logs: List[str], 
+                 level: Optional[str] = None, 
+                 keyword: Optional[str] = None,
+                 start_time: Optional[int] = None,
+                 end_time: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    过滤日志
+    
+    Args:
+        logs: 日志行列表
+        level: 日志级别过滤 (DEBUG, INFO, WARNING, ERROR)
+        keyword: 关键词过滤
+        start_time: 开始时间戳（毫秒）
+        end_time: 结束时间戳（毫秒）
+    
+    Returns:
+        过滤后的日志列表
+    """
+    result = []
+    for line in logs:
+        parsed = _parse_log_line(line)
+        
+        # 日志级别过滤
+        if level:
+            log_level = parsed.get("level", parsed.get("levelname", ""))
+            if log_level and level.upper() not in str(log_level).upper():
+                continue
+        
+        # 关键词过滤
+        if keyword:
+            line_str = json.dumps(parsed, ensure_ascii=False) if isinstance(parsed, dict) else str(parsed)
+            if keyword.lower() not in line_str.lower():
+                continue
+        
+        # 时间过滤（如果有时间字段）
+        if start_time or end_time:
+            log_time = parsed.get("timestamp", parsed.get("time", ""))
+            if log_time:
+                try:
+                    # 尝试转换为时间戳
+                    import datetime
+                    if isinstance(log_time, str):
+                        # 尝试解析字符串时间
+                        dt = datetime.datetime.fromisoformat(log_time.replace('Z', '+00:00'))
+                        log_timestamp = int(dt.timestamp() * 1000)
+                    elif isinstance(log_time, (int, float)):
+                        log_timestamp = int(log_time)
+                    else:
+                        log_timestamp = None
+                    
+                    if log_timestamp:
+                        if start_time and log_timestamp < start_time:
+                            continue
+                        if end_time and log_timestamp > end_time:
+                            continue
+                except Exception:
+                    pass
+        
+        result.append(parsed)
+    
+    return result
+
+
+@app.get("/logs")
+async def get_logs(
+    lines: int = Query(100, ge=1, le=1000, description="要读取的日志行数"),
+    offset: int = Query(0, ge=0, description="偏移量（跳过最后多少行）"),
+    level: Optional[str] = Query(None, description="日志级别过滤: DEBUG, INFO, WARNING, ERROR"),
+    keyword: Optional[str] = Query(None, description="关键词过滤"),
+    start_time: Optional[int] = Query(None, description="开始时间戳（毫秒）"),
+    end_time: Optional[int] = Query(None, description="结束时间戳（毫秒）")
+):
+    """
+    获取运行日志
+    
+    支持分页、按级别过滤、按关键词搜索、按时间范围过滤
+    """
+    try:
+        # 读取主日志文件
+        log_lines = _read_log_file(LOG_FILE, lines, offset)
+        
+        # 同时尝试读取备份日志文件
+        backup_logs = []
+        for i in range(1, 6):  # 最多检查 5 个备份文件
+            backup_file = f"{LOG_FILE}.{i}"
+            if os.path.exists(backup_file):
+                backup_logs.extend(_read_log_file(backup_file, lines, offset))
+        
+        # 合并日志
+        all_logs = log_lines + backup_logs
+        
+        # 过滤日志
+        filtered_logs = _filter_logs(all_logs, level, keyword, start_time, end_time)
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "total": len(filtered_logs),
+                "logs": filtered_logs,
+                "log_file": LOG_FILE
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取日志失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取日志失败: {str(e)}")
+
+
+@app.get("/logs/recent")
+async def get_recent_logs(
+    minutes: int = Query(30, ge=1, le=1440, description="最近多少分钟的日志"),
+    level: Optional[str] = Query(None, description="日志级别过滤"),
+    keyword: Optional[str] = Query(None, description="关键词过滤")
+):
+    """
+    获取最近 N 分钟的日志（简化版）
+    """
+    try:
+        import time
+        end_time = int(time.time() * 1000)
+        start_time = end_time - (minutes * 60 * 1000)
+        
+        # 读取足够多的日志
+        log_lines = _read_log_file(LOG_FILE, 1000, 0)
+        
+        # 过滤日志
+        filtered_logs = _filter_logs(log_lines, level, keyword, start_time, end_time)
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "total": len(filtered_logs),
+                "logs": filtered_logs,
+                "time_range": {
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "minutes": minutes
+                }
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取最近日志失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取最近日志失败: {str(e)}")
+
+
+@app.get("/logs/search")
+async def search_logs(
+    keyword: str = Query(..., description="搜索关键词"),
+    lines: int = Query(500, ge=1, le=2000, description="最多搜索多少行"),
+    level: Optional[str] = Query(None, description="日志级别过滤")
+):
+    """
+    搜索日志（关键词搜索专用）
+    """
+    try:
+        # 读取足够多的日志
+        log_lines = _read_log_file(LOG_FILE, lines, 0)
+        
+        # 同时搜索备份文件
+        for i in range(1, 6):
+            backup_file = f"{LOG_FILE}.{i}"
+            if os.path.exists(backup_file):
+                log_lines.extend(_read_log_file(backup_file, lines, 0))
+        
+        # 过滤日志
+        filtered_logs = _filter_logs(log_lines, level, keyword)
+        
+        return {
+            "code": 0,
+            "message": "success",
+            "data": {
+                "total": len(filtered_logs),
+                "keyword": keyword,
+                "logs": filtered_logs
+            }
+        }
+    except Exception as e:
+        logger.error(f"搜索日志失败: {e}")
+        raise HTTPException(status_code=500, detail=f"搜索日志失败: {str(e)}")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Start FastAPI server")
