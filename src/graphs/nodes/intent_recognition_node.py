@@ -1,6 +1,11 @@
 """
 意图识别节点 - 使用 LLM 智能判断用户意图
 支持：使用指导、故障处理、投诉兜底、轻度不满、满意、评价反馈
+
+优化点：
+1. 移除关键词匹配，改用 LLM 判断退出意图
+2. 增强 LLM 提示词，让模型理解语义
+3. 兜底流程中，只有明确退出意图才返回 exit_fallback
 """
 import os
 import re
@@ -49,9 +54,24 @@ def intent_recognition_node(
     if state.fallback_phase:
         fallback_context = f"""
 【当前处于兜底流程中】
-- 阶段：{state.fallback_phase}
+- 当前阶段：{state.fallback_phase}
 - 问题总结：{state.problem_summary or '暂无'}
-- 问题描述：{state.entry_problem or '暂无'}
+- 用户问题描述：{state.entry_problem or '暂无'}
+
+【重要提示】
+在兜底流程中，用户的回复可能有以下几种意图：
+1. 确认问题总结，同意提交工单
+2. 纠正或补充问题信息（如"你说得不对"、"我还要补充"）
+3. 抱怨重复询问（如"刚才不是说了吗"）
+4. 明确要退出兜底流程（如"算了不要了"、"取消"、"不需要了"）
+5. 继续提问其他问题
+
+【退出兜底判断规则】
+- 只有用户明确、完全、肯定的退出意图才判断为"退出兜底"
+- 如果用户说"取消"但上下文显示是在纠正问题，不是退出
+- 如果用户说"算了"但后面跟着其他内容，需要看整体语义
+- 如果用户只是抱怨或纠正，继续兜底流程
+- 如果用户说"算了不处理了"、"取消处理"、"不需要人工"等，明确退出
 """
     
     # ==================== 调用 LLM 判断意图 ====================
@@ -140,17 +160,24 @@ def intent_recognition_node(
     elif "差评" in intent_text or "没帮助" in intent_text:
         intent = "feedback_bad"
     
-    # 【关键逻辑】在兜底流程中，只有明确说"取消"、"退出"、"不需要了"才退出兜底
-    # 其他情况（用户纠正问题总结、补充信息等）继续兜底流程
+    # 【优化后的兜底退出判断】
+    # 已经在 LLM 提示词中让模型理解语义，这里不再使用关键词匹配
+    # 如果 LLM 已经判断为退出兜底，直接使用
+    # 如果在兜底流程中但 LLM 判断为其他意图（如"使用指导"），则继续兜底流程
     if state.fallback_phase:
-        # 只有明确取消才退出兜底
-        exit_keywords = ["取消", "退出", "不需要了", "不用了", "算了", "不聊了", "再见"]
-        has_exit_keyword = any(kw in user_message for kw in exit_keywords)
-        
-        if has_exit_keyword:
-            intent = "exit_fallback"
+        # 只有明确为 exit_fallback 或 cancel 才退出兜底
+        if intent == "exit_fallback":
+            # LLM 已经判断为退出兜底，保持退出
+            logger.info("意图识别 - LLM 判断退出兜底")
+        elif intent in ["usage_guidance", "fault_handling", "dissatisfied", "satisfied"]:
+            # 如果在兜底流程中，但 LLM 判断为其他意图（如使用指导）
+            # 这种情况可能是用户想继续提问，而不是退出兜底
+            # 继续兜底流程，让 fallback_node 处理
+            logger.info(f"意图识别 - 在兜底流程中，LLM 判断为 {intent}，继续兜底流程")
+            intent = "fallback"
         else:
-            # 其他情况继续兜底流程
+            # 其他情况（fallback、dissatisfied、satisfied 等），继续兜底流程
+            logger.info(f"意图识别 - 在兜底流程中，继续兜底流程 (intent={intent})")
             intent = "fallback"
     
     return IntentRecognitionOutput(intent=intent)

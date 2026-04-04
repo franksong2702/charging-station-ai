@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 def _extract_info_by_llm(
     ctx,
-    user_message: str
+    user_message: str,
+    check_complaint: bool = False
 ) -> dict:
     """
     使用 LLM 从文本中提取手机号和车牌号
@@ -31,12 +32,46 @@ def _extract_info_by_llm(
     Args:
         ctx: 上下文
         user_message: 用户消息
+        check_complaint: 是否检查用户是否在抱怨
         
     Returns:
-        {"phone": "手机号", "license_plate": "车牌号"}
+        {"phone": "手机号", "license_plate": "车牌号", "is_complaint": bool, "complaint_reason": str}
     """
     try:
-        prompt = f"""请从用户消息中提取手机号和车牌号信息。
+        # 根据是否检查抱怨，构建不同的提示词
+        if check_complaint:
+            prompt = f"""请从用户消息中提取手机号和车牌号信息，同时判断用户是否在抱怨。
+
+用户消息：{user_message}
+
+【提取规则】
+1. 手机号：11位数字，以1开头
+   - 用户可能分段说出：如"139。16425678"或"139 1642 5678"
+   - 请将所有数字拼接起来，提取完整的11位手机号
+   
+2. 车牌号：省份简称+字母+5-6位字母或数字
+   - 用户可能分段说出：如"沪a Dr 3509"或"京 A 1 2 3 4 5"
+   - 请将所有部分拼接，提取完整车牌号
+   - 转为大写，去掉空格
+   
+3. 抱怨判断：判断用户是否在抱怨或不满
+   - 例如："刚才不是说了吗"、"不是已经告诉过了"、"不要再问了"、"你让我重复多少遍了"等
+   - 抱怨通常表达不满、重复、烦躁等情绪
+
+【输出格式】
+请返回JSON格式：
+{{"phone": "手机号", "license_plate": "车牌号", "is_complaint": true/false, "complaint_reason": "如果抱怨，说明原因"}}
+
+【示例】
+输入："手机号139。16425678。车牌号。沪a Dr 3509."
+输出：{{"phone": "13916425678", "license_plate": "沪ADR3509", "is_complaint": false, "complaint_reason": ""}}
+
+输入："刚才不是说了吗？手机号13912345678，车牌京A12345"
+输出：{{"phone": "13912345678", "license_plate": "京A12345", "is_complaint": true, "complaint_reason": "用户抱怨需要重复提供信息"}}
+
+请直接返回JSON格式，不要其他说明："""
+        else:
+            prompt = f"""请从用户消息中提取手机号和车牌号信息。
 
 用户消息：{user_message}
 
@@ -106,13 +141,28 @@ def _extract_info_by_llm(
         else:
             license_plate = ""
         
-        logger.info(f"LLM 提取结果 - 手机号: {phone}, 车牌号: {license_plate}")
-        return {"phone": phone, "license_plate": license_plate}
+        # 如果需要检查抱怨，提取抱怨信息
+        is_complaint = result.get("is_complaint", False)
+        complaint_reason = result.get("complaint_reason", "")
+        
+        logger.info(f"LLM 提取结果 - 手机号: {phone}, 车牌号: {license_plate}, 抱怨: {is_complaint}")
+        return {
+            "phone": phone, 
+            "license_plate": license_plate,
+            "is_complaint": is_complaint,
+            "complaint_reason": complaint_reason
+        }
         
     except Exception as e:
         # LLM 调用失败或解析失败，使用正则兜底
         logger.warning(f"LLM 提取信息失败，使用正则兜底: {e}")
-        return _extract_info_by_regex(user_message)
+        result = _extract_info_by_regex(user_message)
+        return {
+            "phone": result.get("phone", ""),
+            "license_plate": result.get("license_plate", ""),
+            "is_complaint": False,
+            "complaint_reason": ""
+        }
 
 
 def _extract_info_by_regex(user_message: str) -> dict:
@@ -497,18 +547,12 @@ def fallback_node(
             
             logger.info(f"兜底流程 - 最终记录的用户问题描述: {entry_problem[:50]}...")
         
-        # 使用 LLM 从用户消息中提取信息
-        extracted = _extract_info_by_llm(ctx, user_message)
+        # 使用 LLM 从用户消息中提取信息，并检查是否在抱怨
+        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=True)
         extracted_phone = extracted.get("phone", "")
         extracted_plate = extracted.get("license_plate", "")
-        
-        # 检测用户是否表达抱怨（如"刚才不是说了吗"）
-        complaint_keywords = [
-            "刚才说了", "不是说了吗", "已经告诉", "不是已经", "刚才不是", "已经说了",
-            "不再重复", "不要重复", "不用再问", "你不是让我", "我不是告诉你",
-            "看历史", "前面都说了", "前面已经", "之前说了", "刚才不是告诉你"
-        ]
-        is_complaint = any(kw in user_message for kw in complaint_keywords)
+        is_complaint = extracted.get("is_complaint", False)
+        complaint_reason = extracted.get("complaint_reason", "")
         
         if extracted_phone:
             phone = extracted_phone
@@ -547,17 +591,19 @@ def fallback_node(
             )
         
         # 如果用户表达了抱怨，但信息仍不完整，先道歉再继续收集
+        # 使用 LLM 判断，不再使用关键词匹配
         if is_complaint:
+            logger.info(f"兜底流程 - LLM 检测到用户抱怨: {complaint_reason}")
             if not phone and not license_plate:
-                reply_content = f"""抱歉抱歉！可能是我这边网络问题没收到...
+                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到..."}
 
 麻烦您再报一次手机号和车牌号吧～"""
             elif not phone:
-                reply_content = f"""抱歉抱歉！可能是我这边网络问题没收到手机号...
+                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到手机号..."}
 
 麻烦您再报一次吧～"""
             else:
-                reply_content = f"""抱歉抱歉！可能是我这边网络问题没收到车牌号...
+                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到车牌号..."}
 
 麻烦您再报一次吧～"""
             
