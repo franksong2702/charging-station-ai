@@ -441,9 +441,22 @@ def knowledge_qa_node(
     # 初始化 LLM 客户端
     llm_client = LLMClient(ctx=ctx)
     
-    # 构建消息（不使用对话历史，避免干扰）
-    # 每次回答都是独立的，基于当前问题和知识库
-    messages = [SystemMessage(content=sp), HumanMessage(content=user_prompt_content)]
+    # 构建消息（使用对话历史作为上下文，让 AI 更有人情味！）
+    messages = [SystemMessage(content=sp)]
+    
+    # 先添加对话历史（最近 10 轮，避免太长但又有上下文）
+    if state.conversation_history:
+        recent_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
+        for msg in recent_history:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+    
+    # 最后添加当前用户消息
+    messages.append(HumanMessage(content=user_prompt_content))
     
     # 调用 LLM（带重试）
     max_llm_retries = 3
