@@ -47,27 +47,24 @@ def _extract_info_by_llm(
 用户消息：{user_message}
 
 【提取规则】
-1. 手机号：11位数字，以1开头
+1. 手机号：以1开头的数字串
+   - 即使位数不对（如少了或多了一位），也要提取出来
    - 用户可能分段说出：如"139。16425678"或"139 1642 5678"
-   - 请将所有数字拼接起来，提取完整的11位手机号
+   - 请将所有数字拼接起来
    
-2. 车牌号：省份简称+字母+5-6位字母或数字
+2. 车牌号：省份简称+字母+数字/字母
    - 用户可能分段说出：如"沪a Dr 3509"或"沪 A 1 2 3 4 5"
    - 请将所有部分拼接，提取完整车牌号
    - 转为大写，去掉空格
    
 3. 问题描述：用户描述的具体问题
    - 例如："充电桩坏了"、"优惠券没用"、"扣费错误"等
-   - 如果用户只是确认或纠正，不需要提取问题描述
-
-4. 抱怨判断：判断用户是否在抱怨或不满（仅当check_complaint=true时）
-   - 例如："刚才不是说了吗"、"不是已经告诉过了"、"不要再问了"等
 
 【输出格式】
 请返回JSON格式：
-{{"phone": "手机号", "license_plate": "车牌号", "problem": "问题描述", "is_complaint": true/false, "complaint_reason": "如果抱怨，说明原因"}}
+{{"phone": "手机号（即使位数不对也要返回）", "license_plate": "车牌号", "problem": "问题描述"}}
 
-如果某项信息不存在或不需要提取，返回空字符串""。
+如果某项信息不存在，返回空字符串""。
 
 请直接返回JSON格式，不要其他说明："""
 
@@ -240,23 +237,76 @@ def fallback_node(
         extracted_plate = extracted.get("license_plate", "")
         extracted_problem = extracted.get("problem", "")
         
+        # 用正则直接从用户消息中提取手机号（不管 LLM 返回什么）
+        phone_raw = ""
+        phone_valid = False
+        phone = ""
+        
+        # 提取用户消息中的所有数字串
+        all_numbers = re.findall(r'\d+', user_message)
+        for num_str in all_numbers:
+            if len(num_str) == 11 and num_str.startswith('1'):
+                phone = num_str
+                phone_valid = True
+                phone_raw = num_str
+                logger.info(f"从用户消息中提取到11位手机号: {phone}")
+                break
+            elif len(num_str) >= 10 and len(num_str) <= 12 and num_str.startswith('1'):
+                phone_raw = num_str
+                logger.info(f"从用户消息中提取到疑似手机号（{len(num_str)}位）: {phone_raw}")
+                break
+            elif 8 <= len(num_str) <= 13 and num_str.startswith('1'):
+                # 可能是被截断的手机号，保留原始值用于友好提示
+                if not phone_raw:
+                    phone_raw = num_str
+                    logger.info(f"从用户消息中提取到疑似手机号（{len(num_str)}位）: {phone_raw}")
+        
+        # LLM 提取车牌号和问题描述
+        extracted_plate = extracted.get("license_plate", "")
+        extracted_problem = extracted.get("problem", "")
+        
+        # 检查车牌号（只要提供了就记录）
+        license_plate = extracted_plate.replace(" ", "").upper() if extracted_plate else ""
+        
         # 更新信息
         updated = []
-        if extracted_phone:
-            phone = extracted_phone
+        if phone_valid:
             updated.append(f"手机号 {phone}")
         if extracted_plate:
-            license_plate = extracted_plate
             updated.append(f"车牌号 {license_plate}")
         if extracted_problem:
             problem_summary = extracted_problem
             updated.append(f"问题 {problem_summary}")
         
+        # 哪些信息没识别到
+        not_recognized = []
+        if not phone_valid and phone_raw:
+            not_recognized.append("手机号")
+        if not extracted_plate:
+            not_recognized.append("车牌号")
+        if not extracted_problem:
+            not_recognized.append("问题描述")
+        
         # 检查是否有信息更新
         if updated:
             logger.info(f"兜底流程 - 更新信息: {', '.join(updated)}")
-        else:
-            logger.info("兜底流程 - 未提取到新信息，继续询问")
+        
+        # 生成友好提示
+        hints = []
+        if not_recognized:
+            if "手机号" in not_recognized and phone_raw:
+                phone_digits = re.sub(r'\D', '', phone_raw)
+                if len(phone_digits) > 0 and len(phone_digits) < 11:
+                    hints.append(f"手机号位数不够，请补全（当前{len(phone_digits)}位）")
+                elif len(phone_digits) > 11:
+                    hints.append(f"手机号位数多了，请检查")
+                else:
+                    hints.append("手机号没识别到，请重新说一下")
+            if "车牌号" in not_recognized:
+                hints.append("车牌号没识别到")
+            if "问题描述" in not_recognized:
+                hints.append("问题描述没识别到")
+                hints.append("问题描述没识别到")
         
         # 检查是否需要让用户确认（已收集到足够信息）
         if phone and license_plate and problem_summary:
@@ -316,9 +366,15 @@ def fallback_node(
         
         # 已有部分信息，友好询问还缺什么
         missing_text = "、".join(missing)
+        
+        # 友好提示
+        hint_text = ""
+        if hints:
+            hint_text = "\n\n" + "\n".join(hints)
+        
         reply_content = f"""好的，{', '.join(updated) if updated else '收到'}～
 
-还缺：{missing_text}
+还缺：{missing_text}{hint_text}
 
 方便的话直接告诉我，比如："手机13812345678" 或 "车牌沪A12345" """
         
