@@ -203,12 +203,12 @@ def test_workflow_path():
         content = f.read()
 
     # 验证修改后的路径
-    assert 'builder.add_edge("create_case", "clear_fallback_state")' in content, \
-        "graph.py 应包含 create_case → clear_fallback_state 的边"
-    assert 'builder.add_edge("clear_fallback_state", "email_sending")' in content, \
-        "graph.py 应包含 clear_fallback_state → email_sending 的边"
+    assert 'builder.add_edge("create_case", "email_sending")' in content, \
+        "graph.py 应包含 create_case → email_sending 的边"
+    assert 'builder.add_edge("email_sending", "clear_fallback_state")' in content, \
+        "graph.py 应包含 email_sending → clear_fallback_state 的边"
 
-    print("  ✓ create_case → clear_fallback_state → email_sending → END")
+    print("  ✓ create_case → email_sending → clear_fallback_state → END")
     print(f"  ✓ 测试通过!")
     return True
 
