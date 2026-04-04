@@ -1,6 +1,11 @@
 """
 查询改写节点 - 使用 LLM 将用户问题改写为更适合知识库检索的搜索词
 基于意图信息，添加相关关键词，提高搜索精准度
+
+优化点：
+1. 移除 skip_rewrite_keywords 关键词列表
+2. 使用 LLM 智能判断是否需要改写
+3. 防止误判："谢谢你的帮助"不会被改写
 """
 import os
 import json
@@ -19,6 +24,80 @@ from graphs.state import QueryRewriteInput, QueryRewriteOutput
 logger = logging.getLogger(__name__)
 
 
+def _should_rewrite_query(ctx, user_message: str) -> bool:
+    """
+    使用 LLM 判断用户消息是否需要改写为知识库检索词
+    
+    Args:
+        ctx: 上下文
+        user_message: 用户消息
+        
+    Returns:
+        bool: 是否需要改写
+    """
+    try:
+        prompt = f"""请判断以下用户消息是否需要改写为知识库检索词。
+
+用户消息：{user_message}
+
+【需要改写的情况】
+- 用户提出了具体的充电桩使用问题（如"充电桩怎么扫码"、"优惠券怎么用"）
+- 用户询问了具体的操作步骤或故障解决方法
+- 用户消息包含实际的问题描述
+
+【不需要改写的情况】
+- 用户只是问候（如"你好"、"嗨"、"hello"）
+- 用户只是感谢或告别（如"谢谢"、"再见"、"拜拜"）
+- 用户只是简单的语气词（如"嗯"、"哦"、"啊"）
+- 用户只是在闲聊，没有提出具体问题
+- 用户消息太短（<5个字符），无法理解具体问题
+
+【输出】
+请返回 JSON 格式：
+{{"should_rewrite": true/false, "reason": "判断理由"}}
+
+请直接返回 JSON 格式，不要其他说明："""
+
+        client = LLMClient(ctx=ctx)
+        response = client.invoke(
+            messages=[HumanMessage(content=prompt)],
+            model="doubao-seed-1-8-251228",
+            temperature=0.1,
+            max_completion_tokens=50
+        )
+        
+        # 提取回复内容
+        content = response.content
+        if isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_parts.append(item.get("text", ""))
+                elif isinstance(item, str):
+                    text_parts.append(item)
+            result_text = "".join(text_parts).strip()
+        else:
+            result_text = str(content).strip()
+        
+        # 清理可能的 markdown 代码块
+        result_text = result_text.strip()
+        if result_text.startswith("```"):
+            result_text = result_text.lstrip("```json").lstrip("```").rstrip("```").strip()
+        
+        # 解析 JSON
+        result = json.loads(result_text)
+        should_rewrite = result.get("should_rewrite", True)
+        reason = result.get("reason", "")
+        
+        logger.info(f"LLM 判断是否改写: {should_rewrite}, 理由: {reason}")
+        return should_rewrite
+        
+    except Exception as e:
+        logger.error(f"LLM 判断是否改写失败: {str(e)}")
+        # 失败时默认改写（保守策略）
+        return True
+
+
 def query_rewrite_node(
     state: QueryRewriteInput,
     config: RunnableConfig,
@@ -35,31 +114,13 @@ def query_rewrite_node(
     user_message = state.user_message.strip()
     intent = state.intent
     
-    # ==================== 白名单：不需要改写的消息 ====================
-    # 对于问候语、闲聊、感谢等，直接使用原始消息，不进行改写
-    # 避免把"你好"改写成"测试消息 简短回答"这种问题
-    skip_rewrite_keywords = [
-        "你好", "您好", "哈喽", "hi", "hello",
-        "谢谢", "感谢", "多谢", "thanks", "thank",
-        "再见", "拜拜", "bye",
-        "哦", "嗯", "啊", "呀", "啦",
-        "测试", "test"
-    ]
+    # ==================== 使用 LLM 判断是否需要改写 ====================
+    # 移除关键词匹配，改用 LLM 智能判断
+    should_rewrite = _should_rewrite_query(ctx, user_message)
     
-    # 检查是否需要跳过改写
-    skip_rewrite = False
-    for keyword in skip_rewrite_keywords:
-        if keyword in user_message.lower():
-            skip_rewrite = True
-            logger.info(f"查询改写 - 检测到关键词 '{keyword}'，跳过改写，使用原始消息")
-            break
-    
-    # 如果消息太短（<5字符），也跳过改写
-    if len(user_message) < 5 and not skip_rewrite:
-        skip_rewrite = True
-        logger.info(f"查询改写 - 消息太短，跳过改写，使用原始消息: {user_message}")
-    
-    if skip_rewrite:
+    # 如果不需要改写，直接返回原始消息
+    if not should_rewrite:
+        logger.info(f"查询改写 - LLM 判断不需要改写，使用原始消息: {user_message}")
         return QueryRewriteOutput(rewritten_query=user_message)
     
     # ==================== 读取配置文件 ====================
