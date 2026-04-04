@@ -209,17 +209,23 @@ def fallback_node(
     
     # ==================== 澄清安抚阶段（先搞清楚问题，安抚情绪） ====================
     if phase == "clarify":
-        # 先提取用户消息中的信息（问题描述等）
-        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=True)
-        extracted_problem = extracted.get("problem", "")
-        
-        # 更新问题（如果有新的问题描述）
-        if extracted_problem and not problem_summary:
-            problem_summary = extracted_problem
+        # 先看有没有已经保存的问题（保留之前用户说的）
+        if not problem_summary and not entry_problem:
+            # 没有保存过问题，提取用户消息中的信息
+            extracted = _extract_info_by_llm(ctx, user_message, check_complaint=True)
+            extracted_problem = extracted.get("problem", "")
+            
+            # 更新问题（如果有新的问题描述）
+            if extracted_problem and not problem_summary:
+                problem_summary = extracted_problem
+        else:
+            # 已有保存的问题，不用再提取了
+            extracted_problem = problem_summary or entry_problem
         
         # 如果用户已经说了问题，先总结一下，问他是否确定要走兜底流程
-        if problem_summary:
-            reply_content = f"""哦，那我明白了，您的问题大概是这样的：{problem_summary}
+        if problem_summary or entry_problem:
+            current_problem = problem_summary or entry_problem
+            reply_content = f"""哦，那我明白了，您的问题大概是这样的：{current_problem}
 
 您的问题我们会反馈给专业的客服团队去处理。请您留下手机号和车牌号，方便我们的客服后续联系您。"""
             return FallbackOutput(
@@ -227,9 +233,9 @@ def fallback_node(
                 fallback_phase="summary_collect",
                 phone=phone,
                 license_plate=license_plate,
-                problem_summary=problem_summary,
+                problem_summary=current_problem,
                 user_supplement="",
-                entry_problem=problem_summary,
+                entry_problem=current_problem,
                 case_confirmed=False,
                 conversation_truncate_index=conversation_truncate_index
             )
@@ -268,6 +274,7 @@ def fallback_node(
             license_plate = extracted_plate
             updated.append(f"车牌号 {license_plate}")
         if extracted_problem:
+            # 只有当用户明确说了新的问题时才更新，否则保留之前的
             problem_summary = extracted_problem
             updated.append(f"情况 {problem_summary}")
         
