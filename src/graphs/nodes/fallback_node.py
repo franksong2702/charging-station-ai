@@ -1,12 +1,14 @@
 """
 兜底流程节点 - 处理需要人工介入的场景
-支持多轮确认：用户说什么就记什么，要改什么就改什么，最后确认
+
+核心原则：
+1. 态度与澄清原则：先安抚，问清楚问题，尽量挡投诉
+2. 总结与确认原则：进入兜底后先总结问题，再收集手机号和车牌号
 
 优化点：
-1. 不再死板地按顺序收集信息（先手机号、后车牌号）
-2. 用户说什么就记什么（手机号/车牌号/问题描述，随意顺序）
-3. 用户要改什么就直接改，不用从头开始
-4. 最后让用户确认所有信息即可
+1. 新增"澄清安抚"阶段（clarify）：先问清楚问题，安抚情绪
+2. 新增"总结与收集"阶段（summary_collect）：先总结问题，再收集联系信息
+3. 用户说什么就记什么，要改什么就改什么，最后确认
 """
 import os
 import json
@@ -104,12 +106,9 @@ def _extract_info_by_llm(
         license_plate = str(result.get("license_plate", "")).strip()
         problem = str(result.get("problem", "")).strip()
         
-        # 验证手机号格式（必须是11位）
-        if phone and len(re.sub(r'\D', '', phone)) == 11:
+        # 手机号不验证格式，用户输入什么就接受什么，让用户确认即可
+        if phone:
             phone = re.sub(r'\D', '', phone)
-        else:
-            phone = ""
-            logger.warning(f"手机号格式错误（非11位）：{phone}")
         
         # 车牌号不验证格式，只要用户提供就记录，让用户确认即可
         if license_plate:
@@ -172,12 +171,12 @@ def fallback_node(
 ) -> FallbackOutput:
     """
     title: 兜底流程处理
-    desc: 简单直接：用户说什么就记什么，要改什么就改什么，最后确认
+    desc: 先澄清安抚，再总结与确认：用户说什么就记什么，要改什么就改什么，最后确认
     integrations: 大语言模型
     """
     ctx = runtime.context
     user_message = state.user_message.strip()
-    phase = state.fallback_phase or "collect_info"
+    phase = state.fallback_phase or "clarify"
     
     logger.info(f"兜底流程 - 当前阶段: {phase}, 用户消息: {user_message}")
     
@@ -208,32 +207,52 @@ def fallback_node(
             conversation_truncate_index=conversation_truncate_index
         )
     
-    # ==================== 确认阶段 ====================
-    if phase == "confirm":
-        # 用户说确认
-        if _is_confirm(user_message):
-            logger.info("兜底流程 - 用户确认完成")
-            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
+    # ==================== 澄清安抚阶段（先搞清楚问题，安抚情绪） ====================
+    if phase == "clarify":
+        # 先提取用户消息中的信息（问题描述等）
+        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=True)
+        extracted_problem = extracted.get("problem", "")
+        
+        # 更新问题（如果有新的问题描述）
+        if extracted_problem and not problem_summary:
+            problem_summary = extracted_problem
+        
+        # 如果用户已经说了问题，先总结一下，问他是否确定要走兜底流程
+        if problem_summary:
+            reply_content = f"""哦，那我明白了，您的问题大概是这样的：{problem_summary}
 
-如有其他问题，随时可以问我。"""
-            
+您的问题我们会反馈给专业的客服团队去处理。请您留下手机号和车牌号，方便我们的客服后续联系您。"""
             return FallbackOutput(
                 reply_content=reply_content,
-                fallback_phase="done",
+                fallback_phase="summary_collect",
                 phone=phone,
                 license_plate=license_plate,
                 problem_summary=problem_summary,
                 user_supplement="",
-                entry_problem=entry_problem,
-                case_confirmed=True,
+                entry_problem=problem_summary,
+                case_confirmed=False,
                 conversation_truncate_index=conversation_truncate_index
             )
         
-        # 用户没有确认，继续收集/更新信息
-        phase = "collect_info"
+        # 用户还没说清楚问题，先安抚并引导
+        reply_content = """非常抱歉给您带来了不好的体验！
+
+您能跟我说说具体遇到了什么情况吗？我先帮您看看～"""
+        
+        return FallbackOutput(
+            reply_content=reply_content,
+            fallback_phase="clarify",
+            phone=phone,
+            license_plate=license_plate,
+            problem_summary=problem_summary,
+            user_supplement="",
+            entry_problem=entry_problem,
+            case_confirmed=False,
+            conversation_truncate_index=conversation_truncate_index
+        )
     
-    # ==================== 收集/更新信息阶段 ====================
-    if phase == "collect_info" or phase == "" or phase == "ask_problem":
+    # ==================== 总结与收集阶段（收集手机号和车牌号） ====================
+    if phase == "summary_collect" or phase == "collect_info" or phase == "" or phase == "ask_problem":
         # 提取用户消息中的信息
         extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
         extracted_phone = extracted.get("phone", "")
@@ -258,8 +277,8 @@ def fallback_node(
         else:
             logger.info("兜底流程 - 未提取到新信息，继续询问")
         
-        # 检查是否需要让用户确认（已收集到足够信息）
-        if phone and license_plate and problem_summary:
+        # 检查是否需要让用户确认（已收集到手机号和车牌号）
+        if phone and license_plate:
             # 信息齐全，让用户确认
             reply_content = f"""好的，已记录：
 
@@ -288,31 +307,6 @@ def fallback_node(
             missing.append("手机号")
         if not license_plate:
             missing.append("车牌号")
-        if not problem_summary:
-            missing.append("情况说明")
-        
-        # 首次进入，友好询问
-        if not phone and not license_plate and not problem_summary and phase == "":
-            reply_content = """好的，我来帮您记录情况反馈给工作人员～
-
-方便告诉我：
-- 📱 您的手机号
-- 🚗 您的车牌号
-- 📝 遇到的情况
-
-可以直接一起说，比如："手机13812345678，车牌沪A12345，充电桩坏了" """
-            
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="collect_info",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=problem_summary,
-                user_supplement="",
-                entry_problem=entry_problem,
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
         
         # 已有部分信息，友好询问还缺什么
         missing_text = "、".join(missing)
@@ -324,7 +318,7 @@ def fallback_node(
         
         return FallbackOutput(
             reply_content=reply_content,
-            fallback_phase="collect_info",
+            fallback_phase="summary_collect",
             phone=phone,
             license_plate=license_plate,
             problem_summary=problem_summary,
@@ -333,6 +327,30 @@ def fallback_node(
             case_confirmed=False,
             conversation_truncate_index=conversation_truncate_index
         )
+    
+    # ==================== 确认阶段 ====================
+    if phase == "confirm":
+        # 用户说确认
+        if _is_confirm(user_message):
+            logger.info("兜底流程 - 用户确认完成")
+            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
+
+如有其他问题，随时可以问我。"""
+            
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="done",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=problem_summary,
+                user_supplement="",
+                entry_problem=entry_problem,
+                case_confirmed=True,
+                conversation_truncate_index=conversation_truncate_index
+            )
+        
+        # 用户没有确认，继续收集/更新信息
+        phase = "summary_collect"
     
     # ==================== 已完成阶段 ====================
     if phase == "done":
@@ -350,8 +368,8 @@ def fallback_node(
     
     # 默认处理
     return FallbackOutput(
-        reply_content="好的，请继续告诉我相关信息～",
-        fallback_phase="collect_info",
+        reply_content="收到～",
+        fallback_phase=phase,
         phone=phone,
         license_plate=license_plate,
         problem_summary=problem_summary,
