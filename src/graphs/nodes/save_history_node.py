@@ -44,9 +44,19 @@ def save_history_node(
         )
         
         # 如果有兜底流程状态，也保存进去
-        # 注意：如果 fallback_phase = "done"，表示兜底已完成，不保存兜底状态
+        # 如果 fallback_phase = "done"，表示兜底已完成，清空兜底状态
         # 这样下次用户来对话时就是新会话
-        if state.fallback_phase and state.fallback_phase != "done":
+        if state.fallback_phase == "done":
+            # 兜底完成，清空状态
+            record.fallback_phase = ""
+            record.phone = ""
+            record.license_plate = ""
+            record.problem_summary = ""
+            record.entry_problem = ""
+            record.user_supplement = ""
+            logger.info(f"兜底流程完成，清空用户 {state.user_id} 的兜底状态")
+        elif state.fallback_phase:
+            # 正在兜底中，保存状态
             record.fallback_phase = state.fallback_phase
             if state.phone:
                 record.phone = state.phone

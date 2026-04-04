@@ -218,8 +218,9 @@ builder.add_conditional_edges(
     }
 )
 
-# 创建工单 → 邮件发送 → 结束
-builder.add_edge("create_case", "email_sending")
+# 创建工单 → 清除兜底状态 → 邮件发送 → 结束
+builder.add_edge("create_case", "clear_fallback_state")
+builder.add_edge("clear_fallback_state", "email_sending")
 builder.add_edge("email_sending", END)
 
 # 退出兜底 → 清除状态 → 查询改写 → 知识库问答

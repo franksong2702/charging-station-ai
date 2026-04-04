@@ -68,15 +68,18 @@ def clear_fallback_state_node(
         session = get_session()
         
         # 保存一条空状态，覆盖之前的兜底状态
+        # 如果 user_message 和 reply_content 为空，说明是兜底完成后的自动清除
         record = ConversationHistory(
             user_id=state.user_id,
             user_message=state.user_message or "",
             reply_content=state.reply_content or "",
-            intent="",
+            intent="" if not state.user_message else "",
             fallback_phase="",  # 清空兜底状态
             phone="",
             license_plate="",
-            problem_summary=""
+            problem_summary="",
+            entry_problem="",
+            user_supplement=""
         )
         
         session.add(record)
