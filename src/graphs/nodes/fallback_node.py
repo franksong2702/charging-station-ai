@@ -1,7 +1,12 @@
 """
 兜底流程节点 - 处理需要人工介入的场景
-支持多轮确认：收集信息 → 生成总结 → 用户确认 → 创建工单
-使用 LLM 智能判断用户意图
+支持多轮确认：用户说什么就记什么，要改什么就改什么，最后确认
+
+优化点：
+1. 不再死板地按顺序收集信息（先手机号、后车牌号）
+2. 用户说什么就记什么（手机号/车牌号/问题描述，随意顺序）
+3. 用户要改什么就直接改，不用从头开始
+4. 最后让用户确认所有信息即可
 """
 import os
 import json
@@ -27,7 +32,7 @@ def _extract_info_by_llm(
     check_complaint: bool = False
 ) -> dict:
     """
-    使用 LLM 从文本中提取手机号和车牌号
+    使用 LLM 从文本中提取手机号、车牌号和问题描述
     
     Args:
         ctx: 上下文
@@ -35,12 +40,10 @@ def _extract_info_by_llm(
         check_complaint: 是否检查用户是否在抱怨
         
     Returns:
-        {"phone": "手机号", "license_plate": "车牌号", "is_complaint": bool, "complaint_reason": str}
+        {"phone": "手机号", "license_plate": "车牌号", "problem": "问题描述", "is_complaint": bool, "complaint_reason": str}
     """
     try:
-        # 根据是否检查抱怨，构建不同的提示词
-        if check_complaint:
-            prompt = f"""请从用户消息中提取手机号和车牌号信息，同时判断用户是否在抱怨。
+        prompt = f"""请从用户消息中提取信息。
 
 用户消息：{user_message}
 
@@ -50,58 +53,30 @@ def _extract_info_by_llm(
    - 请将所有数字拼接起来，提取完整的11位手机号
    
 2. 车牌号：省份简称+字母+5-6位字母或数字
-   - 用户可能分段说出：如"沪a Dr 3509"或"京 A 1 2 3 4 5"
+   - 用户可能分段说出：如"沪a Dr 3509"或"沪 A 1 2 3 4 5"
    - 请将所有部分拼接，提取完整车牌号
    - 转为大写，去掉空格
    
-3. 抱怨判断：判断用户是否在抱怨或不满
-   - 例如："刚才不是说了吗"、"不是已经告诉过了"、"不要再问了"、"你让我重复多少遍了"等
-   - 抱怨通常表达不满、重复、烦躁等情绪
+3. 问题描述：用户描述的具体问题
+   - 例如："充电桩坏了"、"优惠券没用"、"扣费错误"等
+   - 如果用户只是确认或纠正，不需要提取问题描述
+
+4. 抱怨判断：判断用户是否在抱怨或不满（仅当check_complaint=true时）
+   - 例如："刚才不是说了吗"、"不是已经告诉过了"、"不要再问了"等
 
 【输出格式】
 请返回JSON格式：
-{{"phone": "手机号", "license_plate": "车牌号", "is_complaint": true/false, "complaint_reason": "如果抱怨，说明原因"}}
+{{"phone": "手机号", "license_plate": "车牌号", "problem": "问题描述", "is_complaint": true/false, "complaint_reason": "如果抱怨，说明原因"}}
 
-【示例】
-输入："手机号139。16425678。车牌号。沪a Dr 3509."
-输出：{{"phone": "13916425678", "license_plate": "沪ADR3509", "is_complaint": false, "complaint_reason": ""}}
-
-输入："刚才不是说了吗？手机号13912345678，车牌京A12345"
-输出：{{"phone": "13912345678", "license_plate": "京A12345", "is_complaint": true, "complaint_reason": "用户抱怨需要重复提供信息"}}
+如果某项信息不存在或不需要提取，返回空字符串""。
 
 请直接返回JSON格式，不要其他说明："""
-        else:
-            prompt = f"""请从用户消息中提取手机号和车牌号信息。
-
-用户消息：{user_message}
-
-【提取规则】
-1. 手机号：11位数字，以1开头
-   - 用户可能分段说出：如"139。16425678"或"139 1642 5678"
-   - 请将所有数字拼接起来，提取完整的11位手机号
-   
-2. 车牌号：省份简称+字母+5-6位字母或数字
-   - 用户可能分段说出：如"沪a Dr 3509"或"京 A 1 2 3 4 5"
-   - 请将所有部分拼接，提取完整车牌号
-   - 转为大写，去掉空格
-   
-3. 如果某项信息不存在，返回空字符串
-
-【示例】
-输入："手机号139。16425678。车牌号。沪a Dr 3509."
-输出：{{"phone": "13916425678", "license_plate": "沪ADR3509"}}
-
-输入："我的手机是1-3-9-1-2-3-4-5-6-7-8"
-输出：{{"phone": "13912345678", "license_plate": ""}}
-
-请直接返回JSON格式，不要其他说明：
-{{"phone": "手机号", "license_plate": "车牌号"}}"""
 
         client = LLMClient(ctx=ctx)
         response = client.invoke(
             messages=[HumanMessage(content=prompt)],
             model="doubao-seed-1-8-251228",
-            temperature=0.1,  # 低温度，更确定性的输出
+            temperature=0.1,
             max_completion_tokens=100
         )
         
@@ -128,10 +103,11 @@ def _extract_info_by_llm(
         
         phone = str(result.get("phone", "")).strip()
         license_plate = str(result.get("license_plate", "")).strip()
+        problem = str(result.get("problem", "")).strip()
         
         # 验证手机号格式
         if phone and len(re.sub(r'\D', '', phone)) == 11:
-            phone = re.sub(r'\D', '', phone)  # 只保留数字
+            phone = re.sub(r'\D', '', phone)
         else:
             phone = ""
         
@@ -145,276 +121,48 @@ def _extract_info_by_llm(
         is_complaint = result.get("is_complaint", False)
         complaint_reason = result.get("complaint_reason", "")
         
-        logger.info(f"LLM 提取结果 - 手机号: {phone}, 车牌号: {license_plate}, 抱怨: {is_complaint}")
+        logger.info(f"LLM 提取结果 - 手机号: {phone}, 车牌号: {license_plate}, 问题: {problem[:30] if problem else ''}, 抱怨: {is_complaint}")
         return {
             "phone": phone, 
             "license_plate": license_plate,
+            "problem": problem,
             "is_complaint": is_complaint,
             "complaint_reason": complaint_reason
         }
         
     except Exception as e:
-        # LLM 调用失败或解析失败，使用正则兜底
-        logger.warning(f"LLM 提取信息失败，使用正则兜底: {e}")
-        result = _extract_info_by_regex(user_message)
+        logger.error(f"LLM 提取信息失败: {e}")
         return {
-            "phone": result.get("phone", ""),
-            "license_plate": result.get("license_plate", ""),
+            "phone": "",
+            "license_plate": "",
+            "problem": "",
             "is_complaint": False,
             "complaint_reason": ""
         }
 
 
-def _extract_info_by_regex(user_message: str) -> dict:
-    """使用正则表达式提取手机号和车牌号（兜底方案）"""
-    # 手机号正则
-    phone_pattern = r'1[3-9]\d[\s\-]?\d{4}[\s\-]?\d{4}|1[3-9]\d{9}'
-    phone_match = re.search(phone_pattern, user_message)
-    phone = phone_match.group().replace(" ", "").replace("-", "") if phone_match else ""
-    
-    # 车牌号正则
-    plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9\s]{4,6}'
-    plate_match = re.search(plate_pattern, user_message)
-    license_plate = plate_match.group().replace(" ", "").upper() if plate_match else ""
-    
-    logger.info(f"正则提取结果 - 手机号: {phone}, 车牌号: {license_plate}")
-    return {"phone": phone, "license_plate": license_plate}
+def _is_confirm(user_message: str) -> bool:
+    """判断用户是否在确认"""
+    # 确认关键词（去掉标点后匹配）
+    confirm_keywords = [
+        "确认", "确认无误", "没问题", "是的", "对的", "好的", "行", "可以", "嗯嗯",
+        "准确", "没错", "对了", "正确", "ok", "okay", "收到"
+    ]
+    msg = re.sub(r'[，。！？、\.\,\!\?\~\s]', '', user_message.lower())
+    for kw in confirm_keywords:
+        if kw in msg:
+            return True
+    return False
 
 
-def _classify_user_intent(
-    ctx,
-    user_message: str,
-    problem_summary: str,
-    conversation_history: list
-) -> dict:
-    """
-    使用 LLM 智能判断用户意图
-    
-    Args:
-        ctx: 上下文
-        user_message: 用户消息
-        problem_summary: 当前问题总结
-        conversation_history: 对话历史
-        
-    Returns:
-        {
-            "intent": "confirm|announce_correction|actual_correction|cancel|other",
-            "is_correction": bool,  # 是否是纠正（替换）还是补充（追加）
-            "reasoning": str  # 判断理由
-        }
-    """
-    try:
-        # 构建对话摘要
-        dialogue_text = ""
-        if conversation_history:
-            for msg in conversation_history[-10:]:
-                role = "用户" if msg.get("role") == "user" else "客服"
-                content = msg.get("content", "")
-                dialogue_text += f"{role}：{content}\n"
-        
-        prompt = f"""你是一个智能客服意图识别专家。当前场景是：用户的问题总结已经生成，需要判断用户的回复意图。
-
-【当前状态】
-- 用户看到的问题总结："{problem_summary}"
-- 用户回复："{user_message}"
-
-【对话历史】
-{dialogue_text if dialogue_text else "无"}
-
-【你的任务】
-判断用户是在：
-
-1. **confirm（确认）**：用户明确同意问题总结，准备提交工单
-   - 例如："确认"、"没问题"、"对的"、"准确"、"可以了"、"就这样"等
-   - 用户直接表示同意，没有提出任何异议
-
-2. **announce_correction（预告纠正）**：用户说要纠正/补充，但还没给出具体内容
-   - 例如："你说得不对"、"我还要补充"、"等一下"、"等等"、"我还想再说"等
-   - 用户表达否定意图，但没有给出具体的纠正内容
-
-3. **actual_correction（实际纠正）**：用户给出了具体的纠正或补充内容
-   - 例如："你说得不对，优惠券没有抵扣"、"不对，应该是充电失败了"、"我的问题是优惠券过期了"等
-   - 用户不仅表达否定，还给出了具体的实际问题描述
-
-4. **cancel（取消）**：用户不想继续处理，要取消工单
-   - 例如："算了不要了"、"取消"、"不用处理了"等
-   - 用户明确表示要退出流程
-
-5. **other（其他）**：无法归类为以上4种
-   - 用户说了一些无关的话或无法判断意图
-
-【输出格式】
-请返回JSON格式，包含以下字段：
-- intent: 意图类型（confirm/announce_correction/actual_correction/cancel/other）
-- is_correction: 是否是纠正（替换总结）还是补充（追加内容）
-- reasoning: 判断理由
-
-【重要规则】
-1. 优先判断是否为取消（cancel）
-2. 其次判断是否为确认（confirm）
-3. 然后判断是预告纠正还是实际纠正
-4. 如果用户的消息很短（<15字）且包含"不对"、"等一下"、"我还要"等，优先判断为预告纠正
-5. 如果用户的消息包含具体的实际问题描述（如优惠券、充电、计费、故障等），优先判断为实际纠正
-6. 区分"预告纠正"和"实际纠正"的关键：是否给出了具体的实际问题描述
-
-请直接返回JSON格式，不要其他说明：
-{{"intent": "...", "is_correction": true/false, "reasoning": "..."}}"""
-
-        client = LLMClient(ctx=ctx)
-        response = client.invoke(
-            messages=[HumanMessage(content=prompt)],
-            model="doubao-seed-1-8-251228",
-            temperature=0.1,
-            max_completion_tokens=200
-        )
-        
-        # 提取响应文本
-        content = response.content
-        if isinstance(content, list):
-            text_parts = []
-            for item in content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    text_parts.append(item.get("text", ""))
-                elif isinstance(item, str):
-                    text_parts.append(item)
-            content = " ".join(text_parts).strip()
-        else:
-            content = str(content).strip()
-        
-        # 清理可能的 markdown 代码块
-        json_str = content.strip()
-        if json_str.startswith("```"):
-            json_str = re.sub(r'^```json?\s*', '', json_str)
-            json_str = re.sub(r'\s*```$', '', json_str)
-        
-        result = json.loads(json_str)
-        
-        logger.info(f"LLM 意图判断结果: {result}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"LLM 意图判断失败: {e}")
-        # 失败时默认当作补充处理
-        return {
-            "intent": "other",
-            "is_correction": False,
-            "reasoning": f"LLM 调用失败，错误信息: {str(e)}"
-        }
-
-
-def _generate_problem_summary(
-    ctx,
-    conversation_history: list,
-    user_supplement: str,
-    entry_problem: str = ""
-) -> str:
-    """使用 LLM 从对话历史生成问题总结
-    
-    Args:
-        ctx: 上下文
-        conversation_history: 对话历史
-        user_supplement: 用户补充说明
-        entry_problem: 用户进入兜底流程时的问题描述（优先使用）
-    """
-    
-    # 如果有用户进入兜底时的问题描述，先进行智能提取
-    base_problem = entry_problem if entry_problem else ""
-    
-    # 构建对话摘要（用于补充上下文）
-    dialogue_text = ""
-    if conversation_history:
-        for msg in conversation_history[-10:]:  # 最近10轮对话
-            role = "用户" if msg.get("role") == "user" else "客服"
-            content = msg.get("content", "")
-            dialogue_text += f"{role}：{content}\n"
-    
-    # 如果有用户补充，优先使用
-    if user_supplement:
-        prompt = f"""请根据以下信息，总结用户遇到的核心问题。
-
-用户明确指出的问题：
-{user_supplement}
-
-原始问题描述：
-{base_problem if base_problem else "无"}
-
-对话上下文：
-{dialogue_text if dialogue_text else "无"}
-
-【重要规则】
-1. 问题总结必须以用户明确指出的问题为准
-2. 必须准确反映用户的核心问题，不能笼统描述
-3. 如果用户提到"优惠券没有抵扣/没用上/没用"，总结必须是"用户遇到优惠券未抵扣问题，需要处理"
-4. 不要忽略用户提到的具体问题细节
-5. 简洁明了，不超过50字
-6. 格式：用户遇到XXX问题，需要处理。
-
-问题总结："""
-    elif base_problem:
-        prompt = f"""请根据用户的问题描述，总结核心问题。
-
-用户问题描述：
-{base_problem}
-
-【重要规则】
-1. 必须准确反映用户的核心问题，不能笼统描述
-2. 如果用户提到"优惠券没有抵扣/没用上/没用"，总结必须是"用户遇到优惠券未抵扣问题，需要处理"
-3. 如果用户提到"扣费错误/多扣钱"，总结必须包含"扣费"相关内容
-4. 不要忽略用户提到的具体问题细节
-5. 简洁明了，不超过50字
-6. 格式：用户遇到XXX问题，需要处理。
-
-问题总结："""
-    elif dialogue_text:
-        prompt = f"""请根据以下对话记录，准确总结用户遇到的核心问题。
-
-对话记录：
-{dialogue_text}
-
-【重要规则】
-1. 只总结用户实际遇到的问题，不要臆测
-2. 如果用户提到优惠券、结算、扣款等，一定要包含在总结中
-3. 不要添加用户没有提到的问题
-4. 简洁明了，不超过50字
-
-问题总结："""
-    else:
-        return "用户遇到充电桩相关问题，需要人工处理。"
-
-    client = LLMClient(ctx=ctx)
-    response = client.invoke(
-        messages=[HumanMessage(content=prompt)],
-        model="doubao-seed-1-8-251228",
-        temperature=0.3,
-        max_completion_tokens=200
-    )
-    
-    # 提取响应文本
-    result = ""
-    if isinstance(response.content, list):
-        text_parts = []
-        for item in response.content:
-            if isinstance(item, dict) and item.get("type") == "text":
-                text_parts.append(item.get("text", ""))
-        result = " ".join(text_parts).strip()
-    else:
-        result = str(response.content).strip()
-    
-    # 【关键】验证总结是否准确（如果 entry_problem 包含关键词但结果不包含，修正）
-    if base_problem:
-        # 检查是否包含关键问题词汇
-        if "优惠券" in base_problem and "优惠券" not in result:
-            result = "用户遇到优惠券未抵扣问题，需要处理。"
-        elif "扣" in base_problem and "扣" not in result and "费" not in result:
-            result = "用户遇到扣费相关问题，需要处理。"
-    
-    # 如果结果仍然太笼统，尝试提取更准确的内容
-    if result and "充电桩相关问题" in result and base_problem:
-        # 重新生成，强制要求准确
-        if "优惠券" in base_problem:
-            result = "用户遇到优惠券未抵扣问题，需要处理。"
-    
-    return result
+def _is_cancel(user_message: str) -> bool:
+    """判断用户是否要取消"""
+    cancel_keywords = ["取消", "算了", "不要了", "不用处理", "不需要", "不聊了", "再见"]
+    msg = user_message.lower()
+    for kw in cancel_keywords:
+        if kw in msg:
+            return True
+    return False
 
 
 def fallback_node(
@@ -424,7 +172,7 @@ def fallback_node(
 ) -> FallbackOutput:
     """
     title: 兜底流程处理
-    desc: 处理需要人工介入的场景，收集信息并生成问题总结让用户确认
+    desc: 简单直接：用户说什么就记什么，要改什么就改什么，最后确认
     integrations: 大语言模型
     """
     ctx = runtime.context
@@ -433,159 +181,91 @@ def fallback_node(
     
     logger.info(f"兜底流程 - 当前阶段: {phase}, 用户消息: {user_message}")
     
-    # ==================== 取消机制 ====================
-    # 取消关键词（在兜底流程中表达取消意图）
-    cancel_keywords = [
-        "取消兜底", "不要兜底", "不用处理了", "不需要人工",
-        "算了", "再见", "不聊了", "不玩了", "不和你玩",
-        "算了不处理", "取消处理", "不用了", "不需要了"
-    ]
-    for keyword in cancel_keywords:
-        if keyword in user_message:
-            logger.info(f"兜底流程 - 用户取消（关键词: {keyword}）")
-            return FallbackOutput(
-                reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
-                fallback_phase="",  # 清空状态，退出兜底流程
-                phone="",
-                license_plate="",
-                problem_summary="",
-                user_supplement="",
-                entry_problem="",
-                case_confirmed=False
-            )
+    # 初始化状态
+    phone = state.phone
+    license_plate = state.license_plate
+    problem_summary = state.problem_summary
+    entry_problem = state.entry_problem
     
-    # ==================== 阶段0：询问问题 ====================
-    if phase == "" or phase == "ask_problem":
-        # 先从 state 中获取已有的信息（以防用户之前已经提供了手机号/车牌号）
-        phone = state.phone
-        license_plate = state.license_plate
-        entry_problem = state.entry_problem
-        
-        # 记录对话截断索引（第一次进入兜底时，记录当前对话长度，用于邮件中只展示这次投诉的对话）
-        conversation_truncate_index = state.conversation_truncate_index
-        if conversation_truncate_index is None:
-            conversation_truncate_index = len(state.conversation_history) if state.conversation_history else 0
-            logger.info(f"兜底流程 - 记录对话截断索引: {conversation_truncate_index}（之前的对话不展示在邮件中）")
-        
-        # 刚进入兜底流程，先询问用户具体遇到了什么问题
-        if phase == "":
-            # 第一次进入，询问问题
-            logger.info("兜底流程 - 刚进入，先询问用户具体问题")
-            reply_content = """好的，请问您具体遇到了什么问题呢？"""
+    # 记录对话截断索引
+    conversation_truncate_index = state.conversation_truncate_index
+    if conversation_truncate_index is None:
+        conversation_truncate_index = len(state.conversation_history) if state.conversation_history else 0
+        logger.info(f"兜底流程 - 记录对话截断索引: {conversation_truncate_index}")
+    
+    # ==================== 取消机制 ====================
+    if _is_cancel(user_message):
+        logger.info("兜底流程 - 用户取消")
+        return FallbackOutput(
+            reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
+            fallback_phase="",
+            phone="",
+            license_plate="",
+            problem_summary="",
+            user_supplement="",
+            entry_problem="",
+            case_confirmed=False,
+            conversation_truncate_index=conversation_truncate_index
+        )
+    
+    # ==================== 确认阶段 ====================
+    if phase == "confirm":
+        # 用户说确认
+        if _is_confirm(user_message):
+            logger.info("兜底流程 - 用户确认完成")
+            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
+
+如有其他问题，随时可以问我。"""
             
             return FallbackOutput(
                 reply_content=reply_content,
-                fallback_phase="ask_problem",
+                fallback_phase="done",
                 phone=phone,
                 license_plate=license_plate,
-                problem_summary="",
+                problem_summary=problem_summary,
                 user_supplement="",
                 entry_problem=entry_problem,
-                case_confirmed=False,
+                case_confirmed=True,
                 conversation_truncate_index=conversation_truncate_index
             )
-        else:
-            # 在 ask_problem 阶段，用户回复了问题描述
-            # 提取用户的问题描述
-            has_problem_desc = any(kw in user_message for kw in ["充", "电", "优惠券", "扣", "结算", "故障", "问题", "退款", "钱", "索赔", "起火", "烧毁", "投诉"])
-            
-            if has_problem_desc:
-                # 用户描述了问题，记录下来，进入收集信息阶段
-                entry_problem = user_message
-                logger.info(f"兜底流程 - 用户描述了问题，记录并进入收集信息: {entry_problem[:50]}...")
-                phase = "collect_info"
-            else:
-                # 用户没有描述清楚问题，继续询问
-                logger.info("兜底流程 - 用户没有描述清楚问题，继续询问")
-                reply_content = """不好意思，我没太听明白～麻烦您描述一下具体遇到了什么问题，比如充电故障、优惠券问题、退款问题等？"""
-                
-                return FallbackOutput(
-                    reply_content=reply_content,
-                    fallback_phase="ask_problem",
-                    phone=phone,
-                    license_plate=license_plate,
-                    problem_summary="",
-                    user_supplement="",
-                    entry_problem=entry_problem,
-                    case_confirmed=False,
-                    conversation_truncate_index=conversation_truncate_index
-                )
+        
+        # 用户没有确认，继续收集/更新信息
+        phase = "collect_info"
     
-    # ==================== 阶段1：收集信息 ====================
-    if phase == "collect_info":
-        phone = state.phone
-        license_plate = state.license_plate
-        entry_problem = state.entry_problem
-        
-        # 如果是第一次进入兜底流程（没有 entry_problem），记录用户当前的问题描述
-        if not entry_problem:
-            # 【优先使用当前用户消息】
-            # 用户进入兜底流程时发送的消息通常就是问题描述
-            # 检查当前消息是否包含实际问题描述
-            has_problem_desc = any(kw in user_message for kw in ["充", "电", "优惠券", "扣", "结算", "故障", "问题", "退款", "钱"])
-            
-            # ✅ 关键修复：只要包含问题描述，即使同时包含手机号/车牌号，也要提取问题描述！
-            if has_problem_desc:
-                # 当前消息包含问题描述，直接使用（即使同时包含手机号/车牌号）
-                entry_problem = user_message
-                logger.info(f"兜底流程 - 从当前消息提取问题描述: {entry_problem[:50]}...")
-            else:
-                # 当前消息不包含问题描述（如纯情绪词或只有手机号/车牌号）
-                # 从对话历史中找到最近的问题描述
-                if state.conversation_history:
-                    for msg in reversed(state.conversation_history):
-                        if msg.get("role") == "user":
-                            content = msg.get("content", "")
-                            # 排除手机号/车牌号相关的消息
-                            if "手机" in content or "车牌" in content or "联系" in content:
-                                continue
-                            # 排除太短的消息
-                            if len(content) < 10:
-                                continue
-                            # 检查是否包含实际问题描述
-                            if any(kw in content for kw in ["充", "电", "优惠券", "扣", "结算", "故障", "问题", "退款", "钱"]):
-                                entry_problem = content
-                                logger.info(f"兜底流程 - 从历史消息提取问题描述: {entry_problem[:50]}...")
-                                break
-                
-                # 如果还是没有找到，使用默认描述
-                if not entry_problem:
-                    entry_problem = "用户遇到充电桩相关问题，需要人工处理。"
-                    logger.info("兜底流程 - 使用默认问题描述")
-            
-            logger.info(f"兜底流程 - 最终记录的用户问题描述: {entry_problem[:50]}...")
-        
-        # 使用 LLM 从用户消息中提取信息，并检查是否在抱怨
-        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=True)
+    # ==================== 收集/更新信息阶段 ====================
+    if phase == "collect_info" or phase == "" or phase == "ask_problem":
+        # 提取用户消息中的信息
+        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
         extracted_phone = extracted.get("phone", "")
         extracted_plate = extracted.get("license_plate", "")
-        is_complaint = extracted.get("is_complaint", False)
-        complaint_reason = extracted.get("complaint_reason", "")
+        extracted_problem = extracted.get("problem", "")
         
+        # 更新信息
+        updated = []
         if extracted_phone:
             phone = extracted_phone
+            updated.append(f"手机号 {phone}")
         if extracted_plate:
             license_plate = extracted_plate
+            updated.append(f"车牌号 {license_plate}")
+        if extracted_problem:
+            problem_summary = extracted_problem
+            updated.append(f"问题 {problem_summary}")
         
-        # 记录对话截断索引（从 state 中获取）
-        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
+        # 检查是否有信息更新
+        if updated:
+            logger.info(f"兜底流程 - 更新信息: {', '.join(updated)}")
+        else:
+            logger.info("兜底流程 - 未提取到新信息，继续询问")
         
-        # 检查是否已收集齐信息
-        if phone and license_plate:
-            # 信息齐全，生成问题总结（使用 entry_problem）
-            problem_summary = _generate_problem_summary(
-                ctx, state.conversation_history, "", entry_problem
-            )
-            logger.info(f"兜底流程 - 信息收集完成，生成问题总结: {problem_summary[:50]}...")
-            
-            reply_content = f"""好的，信息已记录：
+        # 检查是否需要让用户确认（已收集到足够信息）
+        if phone and license_plate and problem_summary:
+            # 信息齐全，让用户确认
+            reply_content = f"""好的，已记录：
 
 📱 手机号：{phone}
 🚗 车牌号：{license_plate}
-
-───────────
-**问题总结：**
-{problem_summary}
+📝 问题：{problem_summary}
 
 ───────────
 以上信息准确吗？准确的话回复"确认"，有误的话请告诉我～"""
@@ -602,237 +282,81 @@ def fallback_node(
                 conversation_truncate_index=conversation_truncate_index
             )
         
-        # 如果用户表达了抱怨，但信息仍不完整，先道歉再继续收集
-        # 使用 LLM 判断，不再使用关键词匹配
-        if is_complaint:
-            logger.info(f"兜底流程 - LLM 检测到用户抱怨: {complaint_reason}")
-            if not phone and not license_plate:
-                reply_content = f"""非常抱歉给您带来不便！{complaint_reason if complaint_reason else "可能是我这边网络问题导致信息没有收到..."}
+        # 信息不齐全，继续收集
+        missing = []
+        if not phone:
+            missing.append("手机号")
+        if not license_plate:
+            missing.append("车牌号")
+        if not problem_summary:
+            missing.append("问题描述")
+        
+        # 首次进入，友好询问
+        if not phone and not license_plate and not problem_summary and phase == "":
+            reply_content = """好的，我来帮您记录问题反馈给工作人员～
 
-为了帮您更好地处理问题，方便再提供一下您的手机号和车牌号吗？我们可以尽快联系您处理～"""
-            elif not phone:
-                reply_content = f"""非常抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题导致手机号没有收到..."}
+方便告诉我：
+- 📱 您的手机号
+- 🚗 您的车牌号
+- 📝 遇到的问题
 
-方便再提供一下您的手机号吗？这样我们可以联系您处理～"""
-            else:
-                reply_content = f"""非常抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题导致车牌号没有收到..."}
-
-方便再提供一下您的车牌号吗？方便我们记录处理～"""
+可以直接一起说，比如："手机13812345678，车牌沪A12345，充电桩坏了" """
             
             return FallbackOutput(
                 reply_content=reply_content,
                 fallback_phase="collect_info",
                 phone=phone,
                 license_plate=license_plate,
-                problem_summary="",
+                problem_summary=problem_summary,
                 user_supplement="",
                 entry_problem=entry_problem,
                 case_confirmed=False,
                 conversation_truncate_index=conversation_truncate_index
             )
         
-        # 信息不齐全，继续收集
-        if not phone and not license_plate:
-            reply_content = """好的，我会帮您记录并反馈给工作人员处理～
+        # 已有部分信息，友好询问还缺什么
+        missing_text = "、".join(missing)
+        reply_content = f"""好的，{', '.join(updated) if updated else '收到'}～
 
-方便提供一下您的手机号和车牌号吗？这样工作人员可以联系您处理问题。
+还缺：{missing_text}
 
-您可以直接说，比如："手机13912345678，车牌京A12345" """
-        
-        elif not phone:
-            reply_content = f"""好的，车牌号 {license_plate} 已记下！
-
-方便再提供一下您的手机号吗？ """
-        
-        else:
-            reply_content = f"""好的，手机号 {phone} 已记下！
-
-方便再提供一下您的车牌号吗？ """
+方便的话直接告诉我，比如："手机13812345678" 或 "车牌沪A12345" """
         
         return FallbackOutput(
             reply_content=reply_content,
             fallback_phase="collect_info",
             phone=phone,
             license_plate=license_plate,
-            problem_summary="",
+            problem_summary=problem_summary,
             user_supplement="",
             entry_problem=entry_problem,
             case_confirmed=False,
             conversation_truncate_index=conversation_truncate_index
         )
     
-    # ==================== 阶段2：用户确认 ====================
-    elif phase == "confirm":
-        phone = state.phone
-        license_plate = state.license_plate
-        problem_summary = state.problem_summary
-        user_supplement = state.user_supplement
-        entry_problem = state.entry_problem
-        
-        # 记录对话截断索引（从 state 中获取）
-        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
-        
-        # 使用 LLM 判断用户的意图（确认、预告纠正、实际纠正、取消）
-        intent_result = _classify_user_intent(
-            ctx=ctx,
-            user_message=user_message,
-            problem_summary=problem_summary,
-            conversation_history=state.conversation_history
-        )
-        
-        intent = intent_result.get("intent", "")
-        logger.info(f"兜底流程 - LLM 判断用户意图: {intent} (消息: {user_message})")
-        
-        # 根据意图处理
-        if intent == "confirm":
-            # 用户确认
-            logger.info("兜底流程 - 用户确认完成")
-            final_summary = problem_summary
-            if user_supplement:
-                final_summary = f"{problem_summary}\n\n用户补充：{user_supplement}"
-            
-            reply_content = """✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
-
-如有其他问题，随时可以问我。"""
-            
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="done",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=final_summary,
-                user_supplement=user_supplement,
-                entry_problem=entry_problem,
-                case_confirmed=True,
-                conversation_truncate_index=conversation_truncate_index
-            )
-        
-        elif intent == "announce_correction":
-            # 用户预告要纠正，还没给具体内容
-            logger.info("兜底流程 - 用户预告要纠正，引导继续说")
-            reply_content = """好的，请继续说～"""
-            
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="confirm",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=problem_summary,
-                user_supplement=user_supplement,
-                entry_problem=entry_problem,
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
-        
-        elif intent == "actual_correction":
-            # 用户实际给出了纠正内容
-            logger.info("兜底流程 - 用户实际纠正，更新问题总结")
-            
-            # 根据 LLM 返回的内容判断是纠正还是补充
-            if intent_result.get("is_correction", False):
-                # 纠正：替换问题总结
-                user_supplement = user_message
-                new_summary = _generate_problem_summary(
-                    ctx, state.conversation_history, user_message, entry_problem
-                )
-            else:
-                # 补充：追加到补充内容
-                user_supplement = f"{user_supplement}\n{user_message}" if user_supplement else user_message
-                new_summary = _generate_problem_summary(
-                    ctx, state.conversation_history, user_supplement, entry_problem
-                )
-            
-            reply_content = f"""好的，已更新问题总结：
-
-───────────
-**问题总结：**
-{new_summary}
-
-───────────
-以上信息准确吗？准确的话回复"确认"，还需要补充的话请继续说～"""
-            
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="confirm",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=new_summary,
-                user_supplement=user_supplement,
-                entry_problem=entry_problem,
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
-        
-        elif intent == "cancel":
-            # 用户取消
-            logger.info("兜底流程 - 用户取消")
-            return FallbackOutput(
-                reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
-                fallback_phase="",
-                phone="",
-                license_plate="",
-                problem_summary="",
-                user_supplement="",
-                entry_problem="",
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
-        
-        else:
-            # 未知意图，当作补充处理
-            logger.warning(f"兜底流程 - 未知意图 {intent}，当作补充处理")
-            user_supplement = f"{user_supplement}\n{user_message}" if user_supplement else user_message
-            new_summary = _generate_problem_summary(
-                ctx, state.conversation_history, user_supplement, entry_problem
-            )
-            
-            reply_content = f"""好的，已更新问题总结：
-
-───────────
-**问题总结：**
-{new_summary}
-
-───────────
-以上信息准确吗？准确的话回复"确认"，还需要补充的话请继续说～"""
-            
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="confirm",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=new_summary,
-                user_supplement=user_supplement,
-                entry_problem=entry_problem,
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
-    
-    # ==================== 阶段3：已完成 ====================
-    elif phase == "done":
-        # 记录对话截断索引（从 state 中获取）
-        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
-        
+    # ==================== 已完成阶段 ====================
+    if phase == "done":
         return FallbackOutput(
             reply_content="您的问题已提交，工作人员会尽快联系您。",
             fallback_phase="done",
-            phone=state.phone,
-            license_plate=state.license_plate,
-            problem_summary=state.problem_summary,
-            user_supplement=state.user_supplement,
-            entry_problem=state.entry_problem,
+            phone=phone,
+            license_plate=license_plate,
+            problem_summary=problem_summary,
+            user_supplement="",
+            entry_problem=entry_problem,
             case_confirmed=True,
             conversation_truncate_index=conversation_truncate_index
         )
     
-    # 默认返回
+    # 默认处理
     return FallbackOutput(
-        reply_content="抱歉，处理出现异常，请稍后重试。",
+        reply_content="好的，请继续告诉我相关信息～",
         fallback_phase="collect_info",
-        phone="",
-        license_plate="",
-        problem_summary="",
+        phone=phone,
+        license_plate=license_plate,
+        problem_summary=problem_summary,
         user_supplement="",
-        entry_problem="",
+        entry_problem=entry_problem,
         case_confirmed=False,
-        conversation_truncate_index=len(state.conversation_history) if state.conversation_history else 0
+        conversation_truncate_index=conversation_truncate_index
     )
