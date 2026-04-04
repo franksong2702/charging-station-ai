@@ -146,6 +146,8 @@ class EmailSendingInput(BaseModel):
     case_id: str = Field(default="", description="工单 ID")
     # 完整对话历史
     conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话记录（用户+AI）")
+    # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
+    conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
 
 
 class EmailSendingOutput(BaseModel):
@@ -239,6 +241,8 @@ class FallbackInput(BaseModel):
     problem_summary: str = Field(default="", description="已生成的问题总结")
     user_supplement: str = Field(default="", description="用户补充内容")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
+    # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
+    conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
 
 
 class FallbackOutput(BaseModel):
@@ -251,6 +255,8 @@ class FallbackOutput(BaseModel):
     user_supplement: str = Field(default="", description="用户补充内容")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认")
+    # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
+    conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
 
 
 # ==================== 创建工单节点 ====================

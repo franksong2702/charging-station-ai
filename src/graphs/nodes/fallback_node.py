@@ -461,6 +461,12 @@ def fallback_node(
         license_plate = state.license_plate
         entry_problem = state.entry_problem
         
+        # 记录对话截断索引（第一次进入兜底时，记录当前对话长度，用于邮件中只展示这次投诉的对话）
+        conversation_truncate_index = state.conversation_truncate_index
+        if conversation_truncate_index is None:
+            conversation_truncate_index = len(state.conversation_history) if state.conversation_history else 0
+            logger.info(f"兜底流程 - 记录对话截断索引: {conversation_truncate_index}（之前的对话不展示在邮件中）")
+        
         # 刚进入兜底流程，先询问用户具体遇到了什么问题
         if phase == "":
             # 第一次进入，询问问题
@@ -475,7 +481,8 @@ def fallback_node(
                 problem_summary="",
                 user_supplement="",
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         else:
             # 在 ask_problem 阶段，用户回复了问题描述
@@ -500,7 +507,8 @@ def fallback_node(
                     problem_summary="",
                     user_supplement="",
                     entry_problem=entry_problem,
-                    case_confirmed=False
+                    case_confirmed=False,
+                    conversation_truncate_index=conversation_truncate_index
                 )
     
     # ==================== 阶段1：收集信息 ====================
@@ -559,6 +567,9 @@ def fallback_node(
         if extracted_plate:
             license_plate = extracted_plate
         
+        # 记录对话截断索引（从 state 中获取）
+        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
+        
         # 检查是否已收集齐信息
         if phone and license_plate:
             # 信息齐全，生成问题总结（使用 entry_problem）
@@ -587,7 +598,8 @@ def fallback_node(
                 problem_summary=problem_summary,
                 user_supplement="",
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         # 如果用户表达了抱怨，但信息仍不完整，先道歉再继续收集
@@ -595,17 +607,17 @@ def fallback_node(
         if is_complaint:
             logger.info(f"兜底流程 - LLM 检测到用户抱怨: {complaint_reason}")
             if not phone and not license_plate:
-                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到..."}
+                reply_content = f"""非常抱歉给您带来不便！{complaint_reason if complaint_reason else "可能是我这边网络问题导致信息没有收到..."}
 
-麻烦您再报一次手机号和车牌号吧～"""
+为了帮您更好地处理问题，方便再提供一下您的手机号和车牌号吗？我们可以尽快联系您处理～"""
             elif not phone:
-                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到手机号..."}
+                reply_content = f"""非常抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题导致手机号没有收到..."}
 
-麻烦您再报一次吧～"""
+方便再提供一下您的手机号吗？这样我们可以联系您处理～"""
             else:
-                reply_content = f"""抱歉抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题没收到车牌号..."}
+                reply_content = f"""非常抱歉！{complaint_reason if complaint_reason else "可能是我这边网络问题导致车牌号没有收到..."}
 
-麻烦您再报一次吧～"""
+方便再提供一下您的车牌号吗？方便我们记录处理～"""
             
             return FallbackOutput(
                 reply_content=reply_content,
@@ -615,7 +627,8 @@ def fallback_node(
                 problem_summary="",
                 user_supplement="",
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         # 信息不齐全，继续收集
@@ -644,7 +657,8 @@ def fallback_node(
             problem_summary="",
             user_supplement="",
             entry_problem=entry_problem,
-            case_confirmed=False
+            case_confirmed=False,
+            conversation_truncate_index=conversation_truncate_index
         )
     
     # ==================== 阶段2：用户确认 ====================
@@ -654,6 +668,9 @@ def fallback_node(
         problem_summary = state.problem_summary
         user_supplement = state.user_supplement
         entry_problem = state.entry_problem
+        
+        # 记录对话截断索引（从 state 中获取）
+        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
         
         # 使用 LLM 判断用户的意图（确认、预告纠正、实际纠正、取消）
         intent_result = _classify_user_intent(
@@ -686,7 +703,8 @@ def fallback_node(
                 problem_summary=final_summary,
                 user_supplement=user_supplement,
                 entry_problem=entry_problem,
-                case_confirmed=True
+                case_confirmed=True,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         elif intent == "announce_correction":
@@ -702,7 +720,8 @@ def fallback_node(
                 problem_summary=problem_summary,
                 user_supplement=user_supplement,
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         elif intent == "actual_correction":
@@ -740,7 +759,8 @@ def fallback_node(
                 problem_summary=new_summary,
                 user_supplement=user_supplement,
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         elif intent == "cancel":
@@ -754,7 +774,8 @@ def fallback_node(
                 problem_summary="",
                 user_supplement="",
                 entry_problem="",
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
         
         else:
@@ -782,11 +803,15 @@ def fallback_node(
                 problem_summary=new_summary,
                 user_supplement=user_supplement,
                 entry_problem=entry_problem,
-                case_confirmed=False
+                case_confirmed=False,
+                conversation_truncate_index=conversation_truncate_index
             )
     
     # ==================== 阶段3：已完成 ====================
     elif phase == "done":
+        # 记录对话截断索引（从 state 中获取）
+        conversation_truncate_index = state.conversation_truncate_index if state.conversation_truncate_index is not None else len(state.conversation_history) if state.conversation_history else 0
+        
         return FallbackOutput(
             reply_content="您的问题已提交，工作人员会尽快联系您。",
             fallback_phase="done",
@@ -795,7 +820,8 @@ def fallback_node(
             problem_summary=state.problem_summary,
             user_supplement=state.user_supplement,
             entry_problem=state.entry_problem,
-            case_confirmed=True
+            case_confirmed=True,
+            conversation_truncate_index=conversation_truncate_index
         )
     
     # 默认返回
@@ -807,5 +833,6 @@ def fallback_node(
         problem_summary="",
         user_supplement="",
         entry_problem="",
-        case_confirmed=False
+        case_confirmed=False,
+        conversation_truncate_index=len(state.conversation_history) if state.conversation_history else 0
     )

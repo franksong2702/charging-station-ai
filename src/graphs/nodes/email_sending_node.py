@@ -268,11 +268,20 @@ def email_sending_node(
     
     logger.info(f"邮件发送节点 - 手机: {phone}, 车牌: {license_plate}, 工单: {case_id}")
     
-    # 构建对话记录 HTML
+    # 构建对话记录 HTML（只展示最近10条，避免历史记录过长）
+    # 如果有截断索引，只展示截断后的对话（这次投诉的对话）
     conversation_html = ""
     if state.conversation_history:
+        # 优先使用截断索引，只展示截断后的对话
+        truncate_index = getattr(state, 'conversation_truncate_index', None)
+        if truncate_index is not None and truncate_index < len(state.conversation_history):
+            display_history = state.conversation_history[truncate_index:]
+        else:
+            # 没有截断索引时，只展示最近10条对话
+            display_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
+        
         conversation_items = []
-        for msg in state.conversation_history:
+        for msg in display_history:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             if role == "user":
