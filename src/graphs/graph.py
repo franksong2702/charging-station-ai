@@ -227,15 +227,8 @@ builder.add_conditional_edges(
 builder.add_edge("create_case", "email_sending")
 builder.add_edge("email_sending", "clear_fallback_state")
 
-# 清除兜底状态后的路由判断
-builder.add_conditional_edges(
-    source="clear_fallback_state",
-    path=cond_clear_fallback_state_route_path,
-    path_map={
-        "end": END,
-        "query_rewrite": "query_rewrite"
-    }
-)
+# 清除兜底状态后直接结束（避免循环）
+builder.add_edge("clear_fallback_state", END)
 
 # ==================== 编译图 ====================
 
