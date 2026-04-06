@@ -17,7 +17,7 @@ from jinja2 import Template
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from coze_coding_dev_sdk import LLMClient
+from tools.llm import create_llm_client
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from graphs.state import IntentRecognitionInput, IntentRecognitionOutput
@@ -96,8 +96,8 @@ def intent_recognition_node(
         "fallback_context": fallback_context
     })
     
-    # 初始化 LLM 客户端
-    client = LLMClient(ctx=ctx)
+    # 初始化 LLM 客户端（通过工厂创建，未来可轻松切换）
+    client = create_llm_client(ctx=ctx, provider="doubao")
     
     # 构建消息
     messages = [

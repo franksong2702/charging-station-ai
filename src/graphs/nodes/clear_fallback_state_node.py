@@ -13,7 +13,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from jinja2 import Template
-from coze_coding_dev_sdk import LLMClient
+from tools.llm import create_llm_client
 from langchain_core.messages import HumanMessage
 
 from graphs.state import ClearFallbackStateInput, ClearFallbackStateOutput
@@ -76,7 +76,7 @@ def _recognize_intent_for_exit(ctx, user_message: str, config: RunnableConfig) -
         llm_config = _cfg.get("config", {})
         
         # 调用 LLM
-        client = LLMClient(ctx=ctx)
+        client = create_llm_client(ctx=ctx, provider="doubao")
         response = client.invoke(
             messages=[HumanMessage(content=prompt)],
             model=llm_config.get("model", "doubao-seed-1-8-251228"),

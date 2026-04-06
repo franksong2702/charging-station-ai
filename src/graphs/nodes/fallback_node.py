@@ -18,7 +18,7 @@ import re
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from coze_coding_dev_sdk import LLMClient
+from tools.llm import create_llm_client
 from langchain_core.messages import HumanMessage
 
 from graphs.state import FallbackInput, FallbackOutput
@@ -73,7 +73,7 @@ def _extract_info_by_llm(
 
 请直接返回JSON格式，不要其他说明："""
 
-        client = LLMClient(ctx=ctx)
+        client = create_llm_client(ctx=ctx, provider="doubao")
         response = client.invoke(
             messages=[HumanMessage(content=prompt)],
             model="doubao-seed-1-8-251228",

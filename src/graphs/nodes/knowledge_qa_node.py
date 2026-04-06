@@ -12,7 +12,8 @@ from typing import List, Dict, Any, Optional
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from coze_coding_dev_sdk import KnowledgeClient, LLMClient, Config
+from coze_coding_dev_sdk import KnowledgeClient, Config
+from tools.llm import create_llm_client
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from jinja2 import Template
 
@@ -439,7 +440,7 @@ def knowledge_qa_node(
     })
     
     # 初始化 LLM 客户端
-    llm_client = LLMClient(ctx=ctx)
+    llm_client = create_llm_client(ctx=ctx, provider="doubao")
     
     # 构建消息（使用对话历史作为上下文，让 AI 更有人情味！）
     messages = [SystemMessage(content=sp)]

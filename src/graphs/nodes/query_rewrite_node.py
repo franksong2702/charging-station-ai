@@ -15,7 +15,7 @@ from jinja2 import Template
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from coze_coding_dev_sdk import LLMClient
+from tools.llm import create_llm_client
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from graphs.state import QueryRewriteInput, QueryRewriteOutput
@@ -58,7 +58,7 @@ def _should_rewrite_query(ctx, user_message: str) -> bool:
 
 请直接返回 JSON 格式，不要其他说明："""
 
-        client = LLMClient(ctx=ctx)
+        client = create_llm_client(ctx=ctx, provider="doubao")
         response = client.invoke(
             messages=[HumanMessage(content=prompt)],
             model="doubao-seed-1-8-251228",
@@ -144,7 +144,7 @@ def query_rewrite_node(
     })
     
     # ==================== 调用 LLM ====================
-    llm_client = LLMClient(ctx=ctx)
+    llm_client = create_llm_client(ctx=ctx, provider="doubao")
     
     messages = [
         SystemMessage(content=sp),
