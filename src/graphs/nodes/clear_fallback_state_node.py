@@ -163,6 +163,7 @@ def clear_fallback_state_node(
             intent=new_intent
         )
 
+    session = None
     try:
         session = get_session()
 
@@ -183,7 +184,6 @@ def clear_fallback_state_node(
 
         session.add(record)
         session.commit()
-        session.close()
 
         logger.info(f"已清除用户 {state.user_id} 的兜底状态，新意图：{new_intent}")
         return ClearFallbackStateOutput(
@@ -197,6 +197,8 @@ def clear_fallback_state_node(
         )
 
     except Exception as e:
+        if session:
+            session.rollback()
         logger.error(f"清除兜底状态失败：{str(e)}")
         return ClearFallbackStateOutput(
             cleared=False,
@@ -207,3 +209,6 @@ def clear_fallback_state_node(
             case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
             intent=new_intent
         )
+    finally:
+        if session:
+            session.close()

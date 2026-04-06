@@ -111,6 +111,7 @@ def save_record_node(
         logger.info(f"记录上下文 - 原始问题: {original_question[:50]}...")
     
     # ==================== 保存到数据库 ====================
+    session = None
     try:
         session = get_session()
         
@@ -134,11 +135,15 @@ def save_record_node(
         # 插入对话记录
         session.add(record)
         session.commit()
-        session.close()
         
         logger.info(f"对话记录已保存到数据库")
         return SaveRecordOutput(saved=True)
         
     except Exception as e:
+        if session:
+            session.rollback()
         logger.error(f"保存记录失败: {str(e)}")
         return SaveRecordOutput(saved=False)
+    finally:
+        if session:
+            session.close()

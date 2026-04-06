@@ -43,6 +43,7 @@ def load_history_node(
             entry_problem=state.entry_problem
         )
     
+    session = None
     try:
         session = get_session()
         
@@ -55,8 +56,6 @@ def load_history_node(
             .order_by(ConversationHistory.created_at.desc()) \
             .limit(limit) \
             .all()
-        
-        session.close()
         
         if not records:
             # 数据库无记录，使用 GraphInput 中的兜底流程状态
@@ -158,3 +157,6 @@ def load_history_node(
             problem_summary=state.problem_summary,
             entry_problem=state.entry_problem
         )
+    finally:
+        if session:
+            session.close()

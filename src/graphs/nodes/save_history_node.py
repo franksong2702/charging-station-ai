@@ -32,6 +32,7 @@ def save_history_node(
     if not state.user_message or not state.reply_content:
         return SaveHistoryOutput(saved=True)
     
+    session = None
     try:
         session = get_session()
         
@@ -72,12 +73,16 @@ def save_history_node(
         # 插入对话记录
         session.add(record)
         session.commit()
-        session.close()
         
         logger.info(f"保存对话历史成功 - user_id: {state.user_id}, fallback_phase: {state.fallback_phase}")
         return SaveHistoryOutput(saved=True)
         
     except Exception as e:
         # 保存失败不影响主流程，记录错误
+        if session:
+            session.rollback()
         logger.error(f"保存对话历史失败 - Exception: {type(e).__name__}: {e}")
         return SaveHistoryOutput(saved=False)
+    finally:
+        if session:
+            session.close()

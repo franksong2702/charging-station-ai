@@ -31,6 +31,7 @@ def create_case_node(
     logger.info(f"创建工单 - 手机号: {state.phone}, 车牌号: {state.license_plate}")
     logger.info(f"创建工单 - 问题总结: {state.problem_summary[:50]}...")
     
+    session = None
     try:
         session = get_session()
         
@@ -52,8 +53,6 @@ def create_case_node(
         # 获取工单ID
         case_id = str(case_record.id)
         
-        session.close()
-        
         logger.info(f"工单创建成功 - 工单ID: {case_id}")
         
         return CreateCaseOutput(
@@ -62,8 +61,13 @@ def create_case_node(
         )
         
     except Exception as e:
+        if session:
+            session.rollback()
         logger.error(f"创建工单失败: {str(e)}")
         return CreateCaseOutput(
             case_created=False,
             case_id=""
         )
+    finally:
+        if session:
+            session.close()

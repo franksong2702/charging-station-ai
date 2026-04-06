@@ -52,14 +52,6 @@ def get_recipient_config() -> Dict[str, Any]:
     - EMAIL_RECIPIENT_NAME: 收件人名称
     - EMAIL_RECIPIENT_2: 第二个收件邮箱地址（可选，向后兼容）
     """
-    # 【调试】打印所有环境变量，看看实际有什么
-    logger.info("=== 邮件配置调试信息 ===")
-    logger.info(f"当前所有环境变量: {dict(os.environ)}")
-    logger.info(f"EMAIL_RECIPIENT: {os.getenv('EMAIL_RECIPIENT')}")
-    logger.info(f"EMAIL_RECIPIENT_2: {os.getenv('EMAIL_RECIPIENT_2')}")
-    logger.info(f"EMAIL_RECIPIENT_NAME: {os.getenv('EMAIL_RECIPIENT_NAME')}")
-    logger.info("=======================")
-    
     # 优先使用环境变量
     env_recipient_email = os.getenv("EMAIL_RECIPIENT")
     env_recipient_email_2 = os.getenv("EMAIL_RECIPIENT_2")  # 第二个邮箱（可选）
