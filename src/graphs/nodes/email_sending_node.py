@@ -43,68 +43,22 @@ def get_smtp_config() -> Dict[str, Any]:
 
 def get_recipient_config() -> Dict[str, Any]:
     """
-    获取收件邮箱配置（支持多个邮箱）
+    获取收件邮箱配置（使用统一配置管理）
     
-    优先级：环境变量 > 配置文件 > 默认值
-    
-    环境变量：
-    - EMAIL_RECIPIENT: 收件邮箱地址（多个邮箱用逗号分隔）
-    - EMAIL_RECIPIENT_NAME: 收件人名称
-    - EMAIL_RECIPIENT_2: 第二个收件邮箱地址（可选，向后兼容）
+    Returns:
+        Dict[str, Any]: 包含 recipient_emails 和 recipient_name 的字典
     """
-    # 优先使用环境变量
-    env_recipient_email = os.getenv("EMAIL_RECIPIENT")
-    env_recipient_email_2 = os.getenv("EMAIL_RECIPIENT_2")  # 第二个邮箱（可选）
-    env_recipient_name = os.getenv("EMAIL_RECIPIENT_NAME")
+    from config import get_email_recipient_emails, get_email_recipient_name
     
-    recipient_emails = []
+    recipient_emails = get_email_recipient_emails()
+    recipient_name = get_email_recipient_name()
     
-    # 解析主邮箱（支持逗号分隔多个邮箱）
-    if env_recipient_email:
-        # 支持多个邮箱用逗号分隔
-        email_list = [email.strip() for email in env_recipient_email.split(",") if email.strip()]
-        recipient_emails.extend(email_list)
-        logger.info(f"使用环境变量配置的主邮箱: {env_recipient_email}")
+    logger.info(f"使用统一配置 - 收件邮箱列表: {recipient_emails}")
+    logger.info(f"使用统一配置 - 收件人名称: {recipient_name}")
     
-    # 解析第二个邮箱（向后兼容）
-    if env_recipient_email_2:
-        recipient_emails.append(env_recipient_email_2.strip())
-        logger.info(f"使用环境变量配置的第二个邮箱: {env_recipient_email_2}")
-    
-    # 如果有邮箱配置，返回
-    if recipient_emails:
-        return {
-            "recipient_emails": recipient_emails,
-            "recipient_name": env_recipient_name or "客服团队"
-        }
-    
-    # 其次从配置文件读取
-    config_path = os.path.join(os.getenv("COZE_WORKSPACE_PATH", ""), "config/email_config.json")
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-            # 支持配置文件中的多个邮箱
-            if "recipient_emails" in config:
-                recipient_emails = config.get("recipient_emails", [])
-                logger.info(f"使用配置文件的收件邮箱列表: {recipient_emails}")
-            elif "recipient_email" in config:
-                recipient_emails = [config.get("recipient_email")]
-                logger.info(f"使用配置文件的收件邮箱: {config.get('recipient_email')}")
-            
-            if recipient_emails:
-                return {
-                    "recipient_emails": recipient_emails,
-                    "recipient_name": config.get("recipient_name", "客服团队")
-                }
-    except FileNotFoundError:
-        logger.warning(f"邮件配置文件不存在: {config_path}，使用默认配置")
-    except json.JSONDecodeError as e:
-        logger.error(f"邮件配置文件格式错误: {e}")
-    
-    # 默认配置
     return {
-        "recipient_emails": ["xuefu.song@qq.com"],
-        "recipient_name": "充电桩客服团队"
+        "recipient_emails": recipient_emails,
+        "recipient_name": recipient_name
     }
 
 
