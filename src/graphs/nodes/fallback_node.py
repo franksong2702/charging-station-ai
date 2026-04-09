@@ -257,23 +257,67 @@ def fallback_node(
                 conversation_truncate_index=conversation_truncate_index
             )
         
-        # 如果用户已经说了问题，先总结一下，问他是否确定要走兜底流程
+        # 如果用户已经说了问题，先进一步追问更多细节（如果问题不够具体）
         if problem_summary or entry_problem:
+            # 先提取用户当前消息中的问题描述，更新 problem_summary
+            extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
+            extracted_problem = extracted.get("problem", "")
+            
             current_problem = problem_summary or entry_problem
-            reply_content = f"""哦，那我明白了，您的问题大概是这样的：{current_problem}
+            if extracted_problem and extracted_problem != current_problem:
+                # 用户提供了更多细节，更新问题总结
+                if current_problem:
+                    current_problem = f"{current_problem}，{extracted_problem}"
+                else:
+                    current_problem = extracted_problem
+                problem_summary = current_problem
+                logger.info(f"兜底流程 - 用户补充了问题细节，更新后的问题：{current_problem}")
+            
+            # 判断问题是否足够具体，如果不够就继续追问
+            # 简单判断：问题长度较短，或者缺少关键信息（时间、地点、具体情况）
+            need_more_details = len(current_problem) < 20 or (
+                "今天" not in current_problem and
+                "昨天" not in current_problem and
+                "站点" not in current_problem and
+                "突然" not in current_problem and
+                "一半" not in current_problem
+            )
+            
+            if need_more_details:
+                # 问题不够具体，继续追问更多细节
+                reply_content = f"""哦，明白了！您说的是：{current_problem}
+
+为了更好地帮您处理，能再跟我说一说具体情况吗？比如：
+- 什么时候发生的？
+- 在哪个站点？
+- 具体是什么情况？"""
+                return FallbackOutput(
+                    reply_content=reply_content,
+                    fallback_phase="clarify",
+                    phone=phone,
+                    license_plate=license_plate,
+                    problem_summary=current_problem,
+                    user_supplement="",
+                    entry_problem=entry_problem or current_problem,
+                    case_confirmed=False,
+                    conversation_truncate_index=conversation_truncate_index
+                )
+            else:
+                # 问题已经比较具体了，进入收集手机号和车牌号阶段
+                reply_content = f"""哦，那我明白了，您的问题大概是这样的：{current_problem}
 
 您的问题我们会反馈给专业的客服团队去处理。请您留下手机号和车牌号，方便我们的客服后续联系您。"""
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="summary_collect",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=current_problem,
-                user_supplement="",
-                entry_problem=current_problem,
-                case_confirmed=False,
-                conversation_truncate_index=conversation_truncate_index
-            )
+                return FallbackOutput(
+                    reply_content=reply_content,
+                    fallback_phase="summary_collect",
+                    phone=phone,
+                    license_plate=license_plate,
+                    problem_summary=current_problem,
+                    user_supplement="",
+                    entry_problem=entry_problem or current_problem,
+                    case_confirmed=False,
+                    conversation_truncate_index=conversation_truncate_index
+                )
         
         # 用户还没说清楚问题，先安抚并引导
         # 特别针对"退款"类诉求，先问清楚是想了解规则还是有具体订单
