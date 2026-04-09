@@ -31,6 +31,8 @@ def cond_intent_recognition(
         route = "使用指导"
     elif intent == "fault_handling":
         route = "故障处理"
+    elif intent == "negotiate":
+        route = "协商处理"
     elif intent == "complaint":
         route = "兜底流程"
     elif intent == "fallback":
@@ -63,6 +65,8 @@ def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
         return "使用指导"
     elif intent == "fault_handling":
         return "故障处理"
+    elif intent == "negotiate":
+        return "协商处理"
     elif intent == "complaint":
         return "兜底流程"
     elif intent == "fallback":

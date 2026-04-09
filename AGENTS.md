@@ -167,6 +167,9 @@ intent_recognition (意图识别)
 | save_record | `nodes/save_record_node.py` | task | 保存对话记录 | - |
 | cond_intent_recognition | `nodes/cond_intent_recognition_node.py` | condition | 意图路由 | - |
 | cond_fallback | `nodes/cond_fallback_node.py` | condition | 工单确认判断 | - |
+| negotiate | `nodes/negotiate_node.py` | agent | 协商处理（问清楚、给方案） | `config/negotiate_llm_cfg.json` |
+| cond_negotiate | `nodes/cond_negotiate_node.py` | condition | 协商处理路由 | - |
+| summary_agent | `nodes/summary_agent_node.py` | agent | Summary Agent（生成详细问题总结） | - |
 
 **类型说明**: task(普通节点) / agent(大模型节点) / condition(条件分支节点)
 
@@ -183,6 +186,7 @@ intent_recognition (意图识别)
 |-------|---------|---------|
 | 使用指导 | query_rewrite | intent = "usage_guidance" |
 | 故障处理 | query_rewrite | intent = "fault_handling" |
+| 协商处理 | negotiate | intent = "negotiate" |
 | 兜底流程 | fallback | intent = "fallback" / "complaint" |
 | 不满意 | dissatisfied | intent = "dissatisfied" |
 | 满意 | satisfied | intent = "satisfied" |

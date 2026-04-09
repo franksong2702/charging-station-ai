@@ -142,6 +142,8 @@ def intent_recognition_node(
         intent = "usage_guidance"
     elif "故障处理" in intent_text:
         intent = "fault_handling"
+    elif "协商处理" in intent_text:
+        intent = "negotiate"
     elif "退出兜底" in intent_text or "取消兜底" in intent_text:
         # 优先判断退出兜底
         intent = "exit_fallback"

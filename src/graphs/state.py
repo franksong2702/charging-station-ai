@@ -307,3 +307,38 @@ class IntentRouteCheck(BaseModel):
 class CaseConfirmedCheck(BaseModel):
     """工单确认判断的条件输入"""
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+
+
+# ==================== 协商处理节点 ====================
+
+class NegotiateInput(BaseModel):
+    """协商处理节点的输入"""
+    user_message: str = Field(..., description="用户发送的消息")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
+
+
+class NegotiateOutput(BaseModel):
+    """协商处理节点的输出"""
+    reply_content: str = Field(..., description="回复给用户的内容")
+    negotiate_phase: str = Field(default="asking", description="协商阶段：asking(追问)/proposing(给方案)/confirming(确认)")
+    problem_understanding: str = Field(default="", description="对用户问题的理解")
+
+
+# ==================== Summary Agent 节点 ====================
+
+class SummaryInput(BaseModel):
+    """Summary Agent 节点的输入"""
+    conversation_history: List[Dict[str, str]] = Field(..., description="对话历史记录")
+
+
+class SummaryOutput(BaseModel):
+    """Summary Agent 节点的输出"""
+    detailed_summary: str = Field(..., description="详细总结（包含原因）")
+    simple_problem: str = Field(default="", description="简单问题描述")
+
+
+# ==================== 协商处理条件节点输入类型 ====================
+
+class NegotiateRouteCheck(BaseModel):
+    """协商处理路由的条件输入"""
+    user_message: str = Field(default="", description="用户发送的消息")

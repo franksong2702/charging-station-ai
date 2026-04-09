@@ -24,7 +24,9 @@ from graphs.state import (
     CreateCaseInput,
     ClearFallbackStateInput,
     IntentRouteCheck,
-    CaseConfirmedCheck
+    CaseConfirmedCheck,
+    NegotiateInput,
+    NegotiateRouteCheck
 )
 
 from graphs.nodes.intent_recognition_node import intent_recognition_node
@@ -42,6 +44,8 @@ from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition, cond_intent_recognition_path
 from graphs.nodes.cond_fallback_node import cond_fallback, cond_fallback_path, cond_clear_fallback_state_route, cond_clear_fallback_state_route_path
+from graphs.nodes.negotiate_node import negotiate_node
+from graphs.nodes.cond_negotiate_node import cond_negotiate, cond_negotiate_route_path
 
 
 # ==================== 主图编排 ====================
@@ -170,6 +174,23 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
+# 协商处理节点
+builder.add_node(
+    "negotiate",
+    negotiate_node,
+    metadata={
+        "type": "agent",
+        "llm_cfg": "config/negotiate_llm_cfg.json"
+    }
+)
+
+# 协商处理条件节点（暂时注释掉，后续完善路由逻辑时再启用）
+# builder.add_node(
+#     "cond_negotiate",
+#     cond_negotiate,
+#     metadata={"type": "condition"}
+# )
+
 # ==================== 设置入口点 ====================
 
 builder.set_entry_point("load_history")
@@ -186,6 +207,7 @@ builder.add_conditional_edges(
     path_map={
         "使用指导": "query_rewrite",
         "故障处理": "query_rewrite",
+        "协商处理": "negotiate",
         "兜底流程": "fallback",
         "不满意": "dissatisfied",
         "满意": "satisfied",
@@ -213,7 +235,9 @@ builder.add_edge("save_record", END)
 # 兜底流程处理后，先走 save_history 保存对话
 builder.add_edge("fallback", "save_history")
 
-# 保存历史后，再判断是创建工单还是结束（继续兜底就结束，下次再进来）
+# 保存历史后，先判断是协商处理后的分支还是兜底分支
+# 新增一个条件节点来判断
+# 先添加一个临时的条件判断节点（用 existing 的 cond_fallback 先处理兜底）
 builder.add_conditional_edges(
     source="save_history",
     path=cond_fallback_path,
@@ -229,6 +253,13 @@ builder.add_edge("email_sending", "clear_fallback_state")
 
 # 清除兜底状态后直接结束（避免循环）
 builder.add_edge("clear_fallback_state", END)
+
+# ==================== 分支 4：协商处理 → 处理 → 保存历史 → 结束（临时方案）====================
+# 协商处理后，先走 save_history 保存对话，然后先结束（后续再完善路由逻辑）
+builder.add_edge("negotiate", "save_history")
+# 暂时直接从 save_history 到 save_record 再结束
+builder.add_edge("save_history", "save_record")
+builder.add_edge("save_record", END)
 
 # ==================== 编译图 ====================
 
