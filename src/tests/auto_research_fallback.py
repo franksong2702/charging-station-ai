@@ -13,6 +13,7 @@ import json
 import logging
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
+import asyncio
 
 # 添加 src 到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -23,6 +24,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# 导入工作流
+try:
+    from graphs.graph import main_graph
+    from graphs.state import GraphInput
+    from coze_coding_utils.runtime_ctx.context import new_context
+    WORKFLOW_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"工作流导入失败: {e}")
+    WORKFLOW_AVAILABLE = False
 
 # ==================== 10 个测试场景 ====================
 
@@ -108,23 +119,26 @@ def detect_phase(ai_reply: str) -> str:
         "done": 已完成（工单已创建）
         "unknown": 未知阶段
     """
+    if not ai_reply:
+        return "unknown"
+    
     reply_lower = ai_reply.lower()
     
-    # 询问阶段：问用户具体问题
-    if any(keyword in reply_lower for keyword in ["什么问题", "怎么回事", "具体", "说说", "遇到"]):
-        return "ask_clarify"
-    
-    # 收集信息阶段：要手机号/车牌号
-    if any(keyword in reply_lower for keyword in ["手机号", "车牌号", "提供", "方便提供"]):
-        return "collect_info"
+    # 已完成：工单已创建
+    if any(keyword in reply_lower for keyword in ["1-3 个工作日", "尽快处理", "工单", "已提交", "工作人员将会尽快处理"]):
+        return "done"
     
     # 确认阶段：让用户确认信息
     if any(keyword in reply_lower for keyword in ["确认吗", "准确吗", "以上信息", "确认"]):
         return "confirm"
     
-    # 已完成：工单已创建
-    if any(keyword in reply_lower for keyword in ["1-3 个工作日", "尽快处理", "工单", "已提交"]):
-        return "done"
+    # 收集信息阶段：要手机号/车牌号
+    if any(keyword in reply_lower for keyword in ["手机号", "车牌号", "提供", "方便提供"]):
+        return "collect_info"
+    
+    # 询问阶段：问用户具体问题
+    if any(keyword in reply_lower for keyword in ["什么问题", "怎么回事", "具体", "说说", "遇到"]):
+        return "ask_clarify"
     
     return "unknown"
 
@@ -156,6 +170,201 @@ def generate_next_user_message(phase: str, scenario: Dict[str, Any]) -> str:
     
     return "好的"
 
+# ==================== 工作流调用函数 ====================
+
+async def invoke_workflow(user_message: str, conversation_history: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    调用工作流
+    
+    Args:
+        user_message: 用户消息
+        conversation_history: 对话历史
+    
+    Returns:
+        工作流输出
+    """
+    if not WORKFLOW_AVAILABLE:
+        # 工作流不可用，返回模拟结果
+        logger.warning("工作流不可用，返回模拟结果")
+        return {
+            "reply_content": "哦，那我明白了，您的问题大概是这样的：申请退款\n\n您的问题我们会反馈给专业的客服团队去处理。请您留下手机号和车牌号，方便我们的客服后续联系您。",
+            "intent": "fallback",
+            "fallback_phase": "collect_info"
+        }
+    
+    try:
+        # 创建上下文
+        ctx = new_context(method="auto_research")
+        
+        # 构建输入
+        graph_input = GraphInput(
+            user_message=user_message,
+            conversation_history=conversation_history or []
+        )
+        
+        # 调用工作流
+        result = await main_graph.ainvoke(
+            graph_input.model_dump(),
+            config={"configurable": {"thread_id": ctx.run_id}}
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"调用工作流失败: {e}")
+        return {
+            "reply_content": f"调用失败: {e}",
+            "intent": "unknown"
+        }
+
+# ==================== 单个场景测试 ====================
+
+async def run_single_scenario(scenario: Dict[str, Any], prompt_config: str = "v1") -> Dict[str, Any]:
+    """
+    运行单个测试场景
+    
+    Args:
+        scenario: 测试场景
+        prompt_config: Prompt 版本 ("v1" 或 "v2")
+    
+    Returns:
+        测试结果
+    """
+    logger.info(f"=== 运行场景: {scenario['id']} - {scenario['name']} ===")
+    
+    conversation_history = []
+    current_user_message = scenario["user_message"]
+    turns = 0
+    phases = []
+    max_turns = 10
+    
+    while turns < max_turns:
+        turns += 1
+        logger.info(f"  第 {turns} 轮: 用户消息 = {current_user_message[:50]}...")
+        
+        # 调用工作流
+        result = await invoke_workflow(current_user_message, conversation_history)
+        ai_reply = result.get("reply_content", "")
+        
+        if not ai_reply:
+            logger.warning(f"  AI 回复为空")
+            break
+        
+        logger.info(f"  AI 回复: {ai_reply[:80]}...")
+        
+        # 判断阶段
+        phase = detect_phase(ai_reply)
+        phases.append(phase)
+        logger.info(f"  阶段: {phase}")
+        
+        # 保存对话历史
+        conversation_history.append({
+            "role": "user",
+            "content": current_user_message
+        })
+        conversation_history.append({
+            "role": "assistant",
+            "content": ai_reply
+        })
+        
+        # 检查是否完成
+        if phase == "done":
+            logger.info(f"  ✓ 场景完成: 工单已创建")
+            return {
+                "scenario_id": scenario["id"],
+                "scenario_name": scenario["name"],
+                "success": True,
+                "turns": turns,
+                "case_created": True,
+                "phases": phases,
+                "conversation_history": conversation_history
+            }
+        
+        # 生成下一条用户消息
+        if phase == "unknown":
+            logger.warning(f"  ✗ 无法判断阶段，测试失败")
+            return {
+                "scenario_id": scenario["id"],
+                "scenario_name": scenario["name"],
+                "success": False,
+                "turns": turns,
+                "case_created": False,
+                "phases": phases,
+                "error": "无法判断阶段",
+                "conversation_history": conversation_history
+            }
+        
+        current_user_message = generate_next_user_message(phase, scenario)
+        
+        # 处理分次提供信息的场景
+        if "second_message" in scenario and turns == 1:
+            current_user_message = scenario["second_message"]
+    
+    # 超过最大轮数
+    logger.warning(f"  ✗ 超过最大轮数 ({max_turns})，测试失败")
+    return {
+        "scenario_id": scenario["id"],
+        "scenario_name": scenario["name"],
+        "success": False,
+        "turns": turns,
+        "case_created": False,
+        "phases": phases,
+        "error": f"超过最大轮数 ({max_turns})",
+        "conversation_history": conversation_history
+    }
+
+# ==================== 运行所有场景 ====================
+
+async def run_all_scenarios(prompt_config: str = "v1") -> Dict[str, Any]:
+    """
+    运行所有测试场景
+    
+    Args:
+        prompt_config: Prompt 版本
+    
+    Returns:
+        汇总测试结果
+    """
+    logger.info(f"=== 运行所有场景 - Prompt 版本: {prompt_config} ===")
+    
+    results = []
+    passed = 0
+    failed = 0
+    
+    for scenario in TEST_SCENARIOS:
+        try:
+            result = await run_single_scenario(scenario, prompt_config)
+            results.append(result)
+            
+            if result["success"]:
+                passed += 1
+            else:
+                failed += 1
+                
+        except Exception as e:
+            logger.error(f"场景 {scenario['id']} 运行失败: {e}")
+            failed += 1
+            results.append({
+                "scenario_id": scenario["id"],
+                "scenario_name": scenario["name"],
+                "success": False,
+                "error": str(e)
+            })
+    
+    total = len(TEST_SCENARIOS)
+    pass_rate = passed / total if total > 0 else 0
+    
+    logger.info(f"=== 测试完成 - 通过: {passed}/{total} ({pass_rate:.1%}) ===")
+    
+    return {
+        "prompt_version": prompt_config,
+        "total": total,
+        "passed": passed,
+        "failed": failed,
+        "pass_rate": pass_rate,
+        "results": results
+    }
+
 # ==================== Prompt 变体生成 ====================
 
 def generate_prompt_variant(base_prompt: str, variant_num: int) -> str:
@@ -177,12 +386,15 @@ def generate_prompt_variant(base_prompt: str, variant_num: int) -> str:
         ),
         # Variant 2: 优化示例
         lambda p: p + "\n\n【示例】\n用户：我要退款 → 投诉兜底\n用户：退款怎么退 → 使用指导",
-        # Variant 3: 调整温度
-        lambda p: p,  # 温度在配置文件中改
-        # Variant 4: 简化提示词
-        lambda p: p[:len(p)//2] if len(p) > 1000 else p,
-        # Variant 5: 增强边界情况处理
-        lambda p: p + "\n\n【边界情况】\n- 用户只说\"我要投诉\" → 投诉兜底\n- 用户说\"垃圾！垃圾！垃圾！\" → 投诉兜底"
+        # Variant 3: 简化提示词（保留前 80%）
+        lambda p: p[:int(len(p) * 0.8)] if len(p) > 500 else p,
+        # Variant 4: 增强边界情况处理
+        lambda p: p + "\n\n【边界情况】\n- 用户只说\"我要投诉\" → 投诉兜底\n- 用户说\"垃圾！垃圾！垃圾！\" → 投诉兜底",
+        # Variant 5: 调整阶段判断提示
+        lambda p: p.replace(
+            "仅返回意图类型",
+            "仅返回意图类型，不要返回其他内容"
+        )
     ]
     
     if 1 <= variant_num <= len(variants):
@@ -190,85 +402,9 @@ def generate_prompt_variant(base_prompt: str, variant_num: int) -> str:
     
     return base_prompt
 
-# ==================== 测试执行 ====================
-
-def run_single_scenario(scenario: Dict[str, Any], prompt_config: str = "v1") -> Dict[str, Any]:
-    """
-    运行单个测试场景
-    
-    Args:
-        scenario: 测试场景
-        prompt_config: Prompt 版本 ("v1" 或 "v2")
-    
-    Returns:
-        测试结果
-    """
-    logger.info(f"=== 运行场景: {scenario['id']} - {scenario['name']} ===")
-    
-    # TODO: 这里需要实际调用工作流
-    # 暂时返回模拟结果
-    result = {
-        "scenario_id": scenario["id"],
-        "scenario_name": scenario["name"],
-        "success": True,
-        "turns": 4,
-        "case_created": True,
-        "phases": ["ask_clarify", "collect_info", "confirm", "done"]
-    }
-    
-    return result
-
-def run_all_scenarios(prompt_config: str = "v1") -> Dict[str, Any]:
-    """
-    运行所有测试场景
-    
-    Args:
-        prompt_config: Prompt 版本
-    
-    Returns:
-        汇总测试结果
-    """
-    logger.info(f"=== 运行所有场景 - Prompt 版本: {prompt_config} ===")
-    
-    results = []
-    passed = 0
-    failed = 0
-    
-    for scenario in TEST_SCENARIOS:
-        try:
-            result = run_single_scenario(scenario, prompt_config)
-            results.append(result)
-            
-            if result["success"]:
-                passed += 1
-            else:
-                failed += 1
-                
-        except Exception as e:
-            logger.error(f"场景 {scenario['id']} 运行失败: {e}")
-            failed += 1
-            results.append({
-                "scenario_id": scenario["id"],
-                "scenario_name": scenario["name"],
-                "success": False,
-                "error": str(e)
-            })
-    
-    total = len(TEST_SCENARIOS)
-    pass_rate = passed / total if total > 0 else 0
-    
-    return {
-        "prompt_version": prompt_config,
-        "total": total,
-        "passed": passed,
-        "failed": failed,
-        "pass_rate": pass_rate,
-        "results": results
-    }
-
 # ==================== Auto-Research 主循环 ====================
 
-def auto_research_loop(num_rounds: int = 5) -> Dict[str, Any]:
+async def auto_research_loop(num_rounds: int = 5) -> Dict[str, Any]:
     """
     Auto-Research 自动迭代循环
     
@@ -293,7 +429,7 @@ def auto_research_loop(num_rounds: int = 5) -> Dict[str, Any]:
     
     # 运行基准测试 (v1)
     logger.info("--- 第 0 轮：基准测试 (v1) ---")
-    v1_result = run_all_scenarios("v1")
+    v1_result = await run_all_scenarios("v1")
     
     iterations = [
         {
@@ -319,7 +455,7 @@ def auto_research_loop(num_rounds: int = 5) -> Dict[str, Any]:
         variant_config["sp"] = variant_prompt
         
         # 运行测试
-        variant_result = run_all_scenarios(f"v{i+1}")
+        variant_result = await run_all_scenarios(f"v{i+1}")
         
         iterations.append({
             "round": i,
@@ -396,14 +532,14 @@ def generate_report(result: Dict[str, Any]) -> str:
 
 # ==================== 主函数 ====================
 
-def main():
+async def main():
     """主函数"""
     print("=" * 60)
     print("Auto-Research 兜底流程优化")
     print("=" * 60)
     
     # 执行 Auto-Research 循环
-    result = auto_research_loop(5)
+    result = await auto_research_loop(5)
     
     # 生成报告
     report = generate_report(result)
@@ -424,4 +560,4 @@ def main():
     print("=" * 60)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
