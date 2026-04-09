@@ -160,18 +160,16 @@ def intent_recognition_node(
     elif "差评" in intent_text or "没帮助" in intent_text:
         intent = "feedback_bad"
     
-    # 【优化后的兜底退出判断】
-    # 只有明确继续兜底的意图才留在兜底流程，其他都正常处理
+    # 【优化后的兜底退出判断 - 关键修复 P1】
+    # 已在兜底流程中，只有明确退出才退出，否则强制保持为 fallback
     if state.fallback_phase:
         if intent == "exit_fallback":
             # LLM 已经判断为退出兜底，保持退出
             logger.info("意图识别 - LLM 判断退出兜底")
-        elif intent == "fallback":
-            # 明确要继续兜底，保持
-            logger.info("意图识别 - LLM 判断继续兜底流程")
         else:
-            # 其他情况（使用指导、故障处理、满意、不满意、闲聊等），正常处理，退出兜底流程
-            logger.info(f"意图识别 - 在兜底流程中，LLM 判断为 {intent}，正常处理该意图")
-            # 不强制改成 fallback，保持原意图，这样用户可以退出兜底流程
+            # 【关键修复】其他任何意图（包括"故障处理"、"使用指导"等）都强制改为"fallback"
+            # 因为用户已经在兜底流程中了，应该继续走完兜底流程，不要中途退出
+            logger.info(f"意图识别 - 在兜底流程中，强制保持为 fallback，原意图: {intent}")
+            intent = "fallback"
     
     return IntentRecognitionOutput(intent=intent)
