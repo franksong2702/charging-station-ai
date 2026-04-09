@@ -21,7 +21,8 @@ from coze_coding_utils.runtime_ctx.context import Context
 from tools.llm import create_llm_client
 from langchain_core.messages import HumanMessage
 
-from graphs.state import FallbackInput, FallbackOutput
+from graphs.state import FallbackInput, FallbackOutput, SummaryInput
+from graphs.nodes.summary_agent_node import summary_agent_node
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -326,6 +327,23 @@ def fallback_node(
         
         # 检查是否需要让用户确认（已收集到手机号和车牌号）
         if phone and license_plate:
+            # 【新增】调用 Summary Agent 生成详细问题总结
+            try:
+                summary_input = SummaryInput(
+                    conversation_history=state.conversation_history
+                )
+                summary_output = summary_agent_node(
+                    state=summary_input,
+                    config=config,
+                    runtime=runtime
+                )
+                problem_summary = summary_output.detailed_summary
+                logger.info(f"Summary Agent 生成的详细总结：{problem_summary}")
+            except Exception as e:
+                logger.error(f"Summary Agent 调用失败：{e}")
+                # 降级：使用原有逻辑
+                problem_summary = problem_summary or state.problem_summary
+            
             # 信息齐全，让用户确认
             reply_content = f"""好的，已记录：
 
