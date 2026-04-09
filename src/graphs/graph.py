@@ -89,12 +89,7 @@ builder.add_node(
     metadata={"type": "condition"}
 )
 
-# 协商处理条件节点
-builder.add_node(
-    "cond_negotiate",
-    cond_negotiate,
-    metadata={"type": "condition"}
-)
+# 协商处理条件节点已删除，简化路由
 
 # save_history 之后的统一条件路由节点
 builder.add_node(
@@ -277,7 +272,7 @@ builder.add_conditional_edges(
     path_map={
         "save_record": "save_record",
         "cond_fallback": "cond_fallback",
-        "cond_negotiate": END  # 暂时设为 END，避免循环
+        "cond_negotiate": "save_record"  # 协商处理后统一走 save_record
     }
 )
 
@@ -299,16 +294,8 @@ builder.add_edge("create_case", "email_sending")
 builder.add_edge("email_sending", "clear_fallback_state")
 builder.add_edge("clear_fallback_state", END)
 
-# ==================== cond_negotiate 分支 → 协商处理完整路由 ====================
-builder.add_conditional_edges(
-    source="cond_negotiate",
-    path=cond_negotiate_route_path,  # 已导入
-    path_map={
-        "end": END,  # 用户接受方案 → 结束
-        "fallback": "fallback",  # 用户拒绝方案 → 进入兜底
-        "negotiate": END  # 用户继续追问 → 暂时设为 END（避免循环，下次消息重新进入）
-    }
-)
+# ==================== cond_negotiate 分支已删除，简化路由 ====================
+# 协商处理后直接保存历史，后续根据用户下一条消息判断
 
 # 退出兜底 → 直接结束
 builder.add_edge("clear_fallback_state", END)

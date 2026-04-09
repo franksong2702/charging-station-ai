@@ -328,6 +328,7 @@ class NegotiateOutput(BaseModel):
     reply_content: str = Field(..., description="回复给用户的内容")
     negotiate_phase: str = Field(default="asking", description="协商阶段：asking(追问)/proposing(给方案)/confirming(确认)")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
+    route_after_save: str = Field(default="save_record", description="save_history 之后的路由：save_record/cond_fallback")
 
 
 # ==================== Summary Agent 节点 ====================
