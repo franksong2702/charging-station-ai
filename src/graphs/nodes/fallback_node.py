@@ -155,11 +155,13 @@ def _is_confirm(user_message: str) -> bool:
 
 
 def _is_cancel(user_message: str) -> bool:
-    """判断用户是否要取消"""
-    cancel_keywords = ["取消", "算了", "不要了", "不用处理", "不需要", "不聊了", "再见"]
-    msg = user_message.lower()
+    """判断用户是否要取消 - 更严格的判断（修复 P2）"""
+    # 只匹配明确的取消，去掉"算了"（容易误判，如"充不进去电就算了"不是要取消）
+    cancel_keywords = ["取消", "不要了", "不用处理", "不需要", "不聊了", "再见"]
+    # 【重要】必须完整匹配，不要部分匹配
+    msg = user_message.lower().strip()
     for kw in cancel_keywords:
-        if kw in msg:
+        if msg == kw or msg.startswith(kw + "，") or msg.startswith(kw + "。"):
             return True
     return False
 
@@ -192,8 +194,18 @@ def fallback_node(
         conversation_truncate_index = len(state.conversation_history) if state.conversation_history else 0
         logger.info(f"兜底流程 - 记录对话截断索引: {conversation_truncate_index}")
     
-    # ==================== 取消机制 ====================
-    if _is_cancel(user_message):
+    # ==================== 取消机制 - 修复 P2 ====================
+    cancel_triggered = _is_cancel(user_message)
+    
+    # 【新增】如果当前是 clarify 阶段，且用户消息包含强烈情绪词，即使有取消词也不取消
+    if cancel_triggered and phase == "clarify":
+        strong_emotion_words = ["投诉", "垃圾", "气死", "太烂", "太差", "垃圾服务", "什么垃圾"]
+        if any(word in user_message for word in strong_emotion_words):
+            logger.info("兜底流程 - 用户情绪激动，不取消，继续澄清")
+            cancel_triggered = False  # 强制不取消
+    
+    if cancel_triggered:
+        # 真的要取消
         logger.info("兜底流程 - 用户取消")
         return FallbackOutput(
             reply_content="好的，已取消。如果您还有其他问题，欢迎随时问我～",
