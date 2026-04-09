@@ -24,6 +24,7 @@ class RouteMarkerInput(BaseModel):
     # 协商处理相关
     negotiate_phase: str = Field(default="", description="协商处理阶段")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
 
 
 class RouteMarkerOutput(BaseModel):
@@ -42,6 +43,7 @@ class RouteMarkerOutput(BaseModel):
     # 协商处理相关
     negotiate_phase: str = Field(default="", description="协商处理阶段")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
 
 
 def mark_as_save_record(
@@ -66,7 +68,8 @@ def mark_as_save_record(
         case_confirmed=state.case_confirmed,
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
-        problem_understanding=state.problem_understanding
+        problem_understanding=state.problem_understanding,
+        negotiate_round_count=state.negotiate_round_count
     )
 
 
@@ -92,7 +95,8 @@ def mark_as_cond_fallback(
         case_confirmed=state.case_confirmed,
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
-        problem_understanding=state.problem_understanding
+        problem_understanding=state.problem_understanding,
+        negotiate_round_count=state.negotiate_round_count
     )
 
 
@@ -103,9 +107,28 @@ def mark_as_cond_negotiate(
 ) -> RouteMarkerOutput:
     """
     title: 标记为协商处理判断
-    desc: 设置 route_after_save 为 cond_negotiate（协商处理分支用）
+    desc: 设置 route_after_save 为 cond_negotiate（协商处理分支用），检查是否升级到兜底
     integrations: 
     """
+    # 检查协商阶段是否为 escalating（升级到兜底）
+    if state.negotiate_phase == "escalating":
+        return RouteMarkerOutput(
+            route_after_save="cond_fallback",  # 升级到兜底
+            reply_content=state.reply_content,
+            fallback_phase=state.fallback_phase,
+            phone=state.phone,
+            license_plate=state.license_plate,
+            problem_summary=state.problem_summary,
+            user_supplement=state.user_supplement,
+            entry_problem=state.entry_problem,
+            case_confirmed=state.case_confirmed,
+            conversation_truncate_index=state.conversation_truncate_index,
+            negotiate_phase=state.negotiate_phase,
+            problem_understanding=state.problem_understanding,
+            negotiate_round_count=state.negotiate_round_count
+        )
+    
+    # 正常协商处理，轮数 +1
     return RouteMarkerOutput(
         route_after_save="cond_negotiate",
         reply_content=state.reply_content,
@@ -118,5 +141,6 @@ def mark_as_cond_negotiate(
         case_confirmed=state.case_confirmed,
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
-        problem_understanding=state.problem_understanding
+        problem_understanding=state.problem_understanding,
+        negotiate_round_count=state.negotiate_round_count + 1  # 轮数 +1
     )

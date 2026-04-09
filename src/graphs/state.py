@@ -33,8 +33,9 @@ class GlobalState(BaseModel):
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
     case_created: bool = Field(default=False, description="工单是否已创建")
     # 协商处理相关
-    negotiate_phase: str = Field(default="", description="协商处理阶段：asking/proposing/confirming")
+    negotiate_phase: str = Field(default="", description="协商处理阶段：asking/proposing/confirming/escalating")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
     # 路由标记：用于 save_history 之后判断去哪个分支
     route_after_save: str = Field(default="", description="save_history 之后的路由标记：save_record/cond_fallback/cond_negotiate")
 

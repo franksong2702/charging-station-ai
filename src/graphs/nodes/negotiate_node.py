@@ -39,6 +39,19 @@ def negotiate_node(
     
     logger.info(f"协商处理 - 用户消息：{user_message}")
     
+    # 获取当前轮数并 +1
+    current_round = getattr(state, 'negotiate_round_count', 0) + 1
+    
+    # 检查是否超过最大轮数
+    MAX_NEGOTIATE_ROUNDS = 3
+    if current_round >= MAX_NEGOTIATE_ROUNDS:
+        logger.info(f"协商轮数已达上限 ({MAX_NEGOTIATE_ROUNDS})，进入兜底流程")
+        return NegotiateOutput(
+            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
+            negotiate_phase="escalating",  # 升级阶段
+            problem_understanding=""
+        )
+    
     # 构建上下文（最近 3 轮对话）
     recent_history = ""
     if conversation_history:
