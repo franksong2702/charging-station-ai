@@ -43,18 +43,20 @@ def get_smtp_config() -> Dict[str, Any]:
 
 def get_recipient_config() -> Dict[str, Any]:
     """
-    获取收件邮箱配置（使用统一配置管理）
+    获取收件邮箱配置（直接从环境变量读取，避免 pydantic 兼容性问题）
     
     Returns:
         Dict[str, Any]: 包含 recipient_emails 和 recipient_name 的字典
     """
-    from config import get_email_recipient_emails, get_email_recipient_name
+    # 从环境变量读取，或者使用默认值
+    recipient_email = os.getenv("EMAIL_RECIPIENT", "xuefu.song@qq.com")
+    recipient_name = os.getenv("EMAIL_RECIPIENT_NAME", "充电桩客服团队")
     
-    recipient_emails = get_email_recipient_emails()
-    recipient_name = get_email_recipient_name()
+    # 支持多个邮箱用逗号分隔
+    recipient_emails = [email.strip() for email in recipient_email.split(",") if email.strip()]
     
-    logger.info(f"使用统一配置 - 收件邮箱列表: {recipient_emails}")
-    logger.info(f"使用统一配置 - 收件人名称: {recipient_name}")
+    logger.info(f"使用环境变量配置 - 收件邮箱列表: {recipient_emails}")
+    logger.info(f"使用环境变量配置 - 收件人名称: {recipient_name}")
     
     return {
         "recipient_emails": recipient_emails,
