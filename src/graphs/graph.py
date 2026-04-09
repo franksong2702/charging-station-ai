@@ -277,7 +277,7 @@ builder.add_conditional_edges(
     path_map={
         "save_record": "save_record",
         "cond_fallback": "cond_fallback",
-        "cond_negotiate": "cond_negotiate"
+        "cond_negotiate": END  # 暂时设为 END，避免循环
     }
 )
 
@@ -299,9 +299,16 @@ builder.add_edge("create_case", "email_sending")
 builder.add_edge("email_sending", "clear_fallback_state")
 builder.add_edge("clear_fallback_state", END)
 
-# ==================== cond_negotiate 分支 → 协商处理路由（后续完善） ====================
-# 暂时先让协商处理路由到 END，后续再完善
-builder.add_edge("cond_negotiate", END)
+# ==================== cond_negotiate 分支 → 协商处理完整路由 ====================
+builder.add_conditional_edges(
+    source="cond_negotiate",
+    path=cond_negotiate_route_path,  # 已导入
+    path_map={
+        "end": END,  # 用户接受方案 → 结束
+        "fallback": "fallback",  # 用户拒绝方案 → 进入兜底
+        "negotiate": END  # 用户继续追问 → 暂时设为 END（避免循环，下次消息重新进入）
+    }
+)
 
 # 退出兜底 → 直接结束
 builder.add_edge("clear_fallback_state", END)
