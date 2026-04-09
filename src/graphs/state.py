@@ -32,6 +32,11 @@ class GlobalState(BaseModel):
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
     case_created: bool = Field(default=False, description="工单是否已创建")
+    # 协商处理相关
+    negotiate_phase: str = Field(default="", description="协商处理阶段：asking/proposing/confirming")
+    problem_understanding: str = Field(default="", description="对用户问题的理解")
+    # 路由标记：用于 save_history 之后判断去哪个分支
+    route_after_save: str = Field(default="", description="save_history 之后的路由标记：save_record/cond_fallback/cond_negotiate")
 
 
 # ==================== 图的输入输出 ====================
@@ -342,3 +347,12 @@ class SummaryOutput(BaseModel):
 class NegotiateRouteCheck(BaseModel):
     """协商处理路由的条件输入"""
     user_message: str = Field(default="", description="用户发送的消息")
+
+
+class AfterSaveRouteCheck(BaseModel):
+    """save_history 之后路由检查的输入"""
+    route_after_save: str = Field(default="", description="路由标记：save_record/cond_fallback/cond_negotiate")
+    # 兜底流程相关
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+    # 协商处理相关
+    user_message: str = Field(default="", description="用户消息（用于协商处理路由判断）")

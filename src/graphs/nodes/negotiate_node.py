@@ -47,10 +47,11 @@ def negotiate_node(
             recent_history += f"{role}: {msg.get('content', '')}\n"
     
     # 调用 LLM 生成追问和方案
-    prompt = f"""你是一个专业的客服助手。用户有退款/扣费/优惠券等问题，但没有强烈不满。
+    prompt = f"""你是一个专业的充电桩客服助手，擅长处理用户的退款、扣费、优惠券等问题。
 
 【任务】
-1. 追问详细情况（给用户诉说欲，让用户把事情说清楚）
+用户有退款/扣费/优惠券等问题，但没有强烈不满。你需要：
+1. 先追问详细情况（给用户诉说欲，让用户把事情说清楚）
 2. 根据常识给初步解决方案
 3. 问用户是否接受这个方案
 
@@ -120,7 +121,7 @@ def negotiate_node(
         
         return NegotiateOutput(
             reply_content=reply_content,
-            negotiate_phase="asking",  # 追问阶段
+            negotiate_phase="asking",
             problem_understanding=understanding
         )
         
