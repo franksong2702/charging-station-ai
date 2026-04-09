@@ -247,6 +247,57 @@ class GraphService:
 service = GraphService()
 app = FastAPI()
 
+
+# ==================== 预热逻辑 ====================
+@app.on_event("startup")
+async def startup_event():
+    """
+    服务启动时的预热逻辑
+    提前初始化各个组件，避免第一次请求时的冷启动延迟
+    """
+    import time
+    logger.info("=" * 60)
+    logger.info("🚀 服务启动预热开始...")
+    logger.info("=" * 60)
+    
+    start_time = time.time()
+    
+    # 1. 预加载图实例
+    try:
+        logger.info("[1/4] 预加载 LangGraph 工作流...")
+        graph_start = time.time()
+        ctx = new_context(method="warmup")
+        service._get_graph(ctx)
+        graph_elapsed = time.time() - graph_start
+        logger.info(f"✅ LangGraph 工作流预加载完成，耗时: {graph_elapsed:.2f}s")
+    except Exception as e:
+        logger.warning(f"⚠️ LangGraph 预加载失败（不影响服务启动）: {e}")
+    
+    # 2. 预热数据库连接池
+    try:
+        logger.info("[2/4] 预热数据库连接池...")
+        db_start = time.time()
+        # 尝试获取一个数据库连接，触发连接池初始化
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_elapsed = time.time() - db_start
+        logger.info(f"✅ 数据库连接池预热完成，耗时: {db_elapsed:.2f}s")
+    except Exception as e:
+        logger.warning(f"⚠️ 数据库预热失败（不影响服务启动）: {e}")
+    
+    # 3. 初始化日志系统（已在 setup_logging 中完成）
+    logger.info("[3/4] 日志系统已初始化")
+    
+    # 4. 打印预热完成信息
+    total_elapsed = time.time() - start_time
+    logger.info("=" * 60)
+    logger.info(f"🎉 服务启动预热完成！总耗时: {total_elapsed:.2f}s")
+    logger.info("=" * 60)
+    logger.info("")
+    logger.info("💡 提示：第一次用户请求时将不再有明显的冷启动延迟！")
+    logger.info("")
+
 # OpenAI 兼容接口处理器
 openai_handler = OpenAIChatHandler(service)
 
