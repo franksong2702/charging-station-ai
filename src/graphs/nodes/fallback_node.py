@@ -273,15 +273,57 @@ def fallback_node(
                 problem_summary = current_problem
                 logger.info(f"兜底流程 - 用户补充了问题细节，更新后的问题：{current_problem}")
             
-            # 判断问题是否足够具体，如果不够就继续追问
-            # 简单判断：问题长度较短，或者缺少关键信息（时间、地点、具体情况）
-            need_more_details = len(current_problem) < 20 or (
-                "今天" not in current_problem and
-                "昨天" not in current_problem and
-                "站点" not in current_problem and
-                "突然" not in current_problem and
-                "一半" not in current_problem
-            )
+            # 【优化】用大语言模型判断问题是否足够具体
+            try:
+                need_more_details_prompt = f"""请判断用户的问题描述是否足够具体，是否需要进一步追问更多细节。
+
+用户的问题描述：{current_problem}
+
+【判断规则】
+- 如果问题描述比较模糊（只有"充不进去电"、"多扣钱"等简单描述）→ 需要更多细节
+- 如果问题描述包含时间、地点、具体情况等信息 → 不需要更多细节
+
+【输出格式】
+请直接返回 JSON 格式：
+{{"need_more_details": true/false}}
+
+请直接返回 JSON 格式，不要其他说明："""
+                
+                client = create_llm_client(ctx=ctx, provider="doubao")
+                response = client.invoke(
+                    messages=[HumanMessage(content=need_more_details_prompt)],
+                    model="doubao-seed-1-8-251228",
+                    temperature=0.1,
+                    max_completion_tokens=50
+                )
+                
+                # 提取内容
+                content = response.content
+                if isinstance(content, list):
+                    text_parts = []
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                        elif isinstance(item, str):
+                            text_parts.append(item)
+                    content = " ".join(text_parts).strip()
+                else:
+                    content = str(content).strip()
+                
+                # 清理可能的 markdown 代码块
+                json_str = content.strip()
+                if json_str.startswith("```"):
+                    json_str = re.sub(r'^```json?\s*', '', json_str)
+                    json_str = re.sub(r'\s*```$', '', json_str)
+                
+                result = json.loads(json_str)
+                need_more_details = result.get("need_more_details", True)
+                logger.info(f"LLM 判断是否需要更多细节：{need_more_details}")
+                
+            except Exception as e:
+                logger.error(f"LLM 判断问题是否具体失败：{e}")
+                # 降级：默认需要更多细节
+                need_more_details = True
             
             if need_more_details:
                 # 问题不够具体，继续追问更多细节
