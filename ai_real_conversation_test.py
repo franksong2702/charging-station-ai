@@ -119,7 +119,7 @@ def run_real_conversation_test(test_case: Dict[str, Any]) -> Dict[str, Any]:
             # 调用工作流
             result = main_graph.invoke({
                 "user_message": user_message,
-                "conversation_id": conversation_id
+                "user_id": conversation_id
             })
             
             ai_reply = result.get("reply_content", "")
