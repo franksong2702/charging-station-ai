@@ -112,9 +112,11 @@ def negotiate_node(
         # 生成回复
         reply_parts = []
         
-        # 1. 复述理解（让用户感觉被理解）
+        # 1. 复述理解（让用户感觉被理解）- 修复：将"用户"替换为"您"
         if understanding:
-            reply_parts.append(f"明白了，{understanding}。")
+            # 将 understanding 中的"用户"替换为"您"，因为这是直接对用户说的话
+            understanding_for_user = understanding.replace("用户", "您")
+            reply_parts.append(f"明白了，{understanding_for_user}。")
         
         # 2. 追问问题
         if question:

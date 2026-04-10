@@ -516,12 +516,14 @@ def fallback_node(
                 # 降级：使用原有逻辑
                 problem_summary = problem_summary or state.problem_summary
             
-            # 信息齐全，让用户确认
+            # 信息齐全，让用户确认 - 修复：将 problem_summary 中的"用户"替换为"您"
+            # 因为 problem_summary 是 Summary Agent 生成的，可能包含"用户"，但这是直接对用户说的话
+            problem_summary_for_user = problem_summary.replace("用户", "您") if problem_summary else ""
             reply_content = f"""好的，已记录：
 
 📱 手机号：{phone}
 🚗 车牌号：{license_plate}
-📝 情况：{problem_summary}
+📝 情况：{problem_summary_for_user}
 
 ───────────
 以上信息准确吗？准确的话回复"确认"，有误的话请告诉我～"""
