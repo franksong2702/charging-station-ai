@@ -143,13 +143,26 @@ def _extract_info_by_llm(
 
 def _is_confirm(user_message: str) -> bool:
     """判断用户是否在确认"""
-    # 确认关键词（去掉标点后匹配）
+    # 确认关键词（去掉标点后匹配）- 包含用户要求的所有同义词
     confirm_keywords = [
-        "确认", "确认无误", "没问题", "是的", "对的", "好的", "行", "可以", "可以的", "嗯嗯",
-        "准确", "没错", "对了", "正确", "就是这样", "同意", "好", "嗯", "要得",
-        "对", "ok", "okay", "OK", "收到"
+        "确认", "确认无误", "没问题", "是的", "对", "对的", "好的", "行", "可以", "可以的",
+        "准确", "没错", "对了", "正确", "就是这样", "同意", "好", "嗯", "嗯嗯",
+        "要得", "ok", "okay", "OK", "收到"
     ]
+    # 先去掉标点符号
     msg = re.sub(r'[，。！？、\.\,\!\?\~\s]', '', user_message.lower())
+    
+    # 特殊处理：排除否定词
+    # 如果消息以"不"开头且后面跟着确认词，排除（如"不对"、"不行"）
+    if msg.startswith("不") and len(msg) > 1:
+        # 检查"不"后面的部分是否是确认词
+        rest = msg[1:]
+        for kw in confirm_keywords:
+            if rest == kw:
+                # 这是否定词，如"不对"、"不行"
+                return False
+    
+    # 正常匹配确认词
     for kw in confirm_keywords:
         if kw in msg:
             return True
