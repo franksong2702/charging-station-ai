@@ -1,0 +1,48 @@
+{
+  "test_time": "2026-04-10 14:37:44",
+  "total_cases": 5,
+  "passed": 0,
+  "failed": 5,
+  "results": [
+    {
+      "id": "TC-001",
+      "name": "使用指导 - 特斯拉充电桩怎么扫码",
+      "success": false,
+      "user_message": "特斯拉充电桩怎么扫码？",
+      "error": "401 Client Error: Unauthorized for url: https://wp5bsz5qfm.coze.site/run",
+      "elapsed_time": 0.3250603675842285
+    },
+    {
+      "id": "TC-002",
+      "name": "故障处理 - 充不进去电怎么办",
+      "success": false,
+      "user_message": "充不进去电怎么办？",
+      "error": "401 Client Error: Unauthorized for url: https://wp5bsz5qfm.coze.site/run",
+      "elapsed_time": 0.13287019729614258
+    },
+    {
+      "id": "TC-003",
+      "name": "协商处理 - 我要退款",
+      "success": false,
+      "user_message": "我要退款",
+      "error": "401 Client Error: Unauthorized for url: https://wp5bsz5qfm.coze.site/run",
+      "elapsed_time": 0.15286564826965332
+    },
+    {
+      "id": "TC-004",
+      "name": "投诉兜底 - 我要投诉",
+      "success": false,
+      "user_message": "我要投诉",
+      "error": "401 Client Error: Unauthorized for url: https://wp5bsz5qfm.coze.site/run",
+      "elapsed_time": 0.10882091522216797
+    },
+    {
+      "id": "TC-005",
+      "name": "评价反馈 - 谢谢",
+      "success": false,
+      "user_message": "谢谢",
+      "error": "401 Client Error: Unauthorized for url: https://wp5bsz5qfm.coze.site/run",
+      "elapsed_time": 0.15976524353027344
+    }
+  ]
+}
