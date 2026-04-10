@@ -272,6 +272,57 @@ COMPLETE_TEST_CASES = [
                 unexpected_keywords=["投诉", "兜底"]
             )
         ]
+    ),
+    
+    # ==================== 兜底流程模块 ====================
+    TestCase(
+        id="FB-001",
+        name="触发兜底流程（情绪投诉）",
+        category="兜底流程",
+        description="验证用户不满时能进入兜底流程",
+        steps=[
+            TestCaseStep(
+                user_message="垃圾系统，气死我了",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            )
+        ]
+    ),
+    TestCase(
+        id="FB-002",
+        name="触发兜底流程（明确投诉）",
+        category="兜底流程",
+        description="验证用户明确投诉时能进入兜底流程",
+        steps=[
+            TestCaseStep(
+                user_message="我要投诉",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            )
+        ]
+    ),
+    TestCase(
+        id="FB-003",
+        name="兜底流程收集用户信息",
+        category="兜底流程",
+        description="验证能正确收集用户联系方式",
+        steps=[
+            TestCaseStep(
+                user_message="我要投诉",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="充电桩坏了，充不进去电",
+                expected_keywords=[],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="手机13800138000，车牌京A12345",
+                expected_keywords=["手机号", "车牌号"],
+                unexpected_keywords=[]
+            )
+        ]
     )
 ]
 
