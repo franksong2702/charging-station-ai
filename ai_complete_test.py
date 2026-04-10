@@ -274,52 +274,168 @@ COMPLETE_TEST_CASES = [
         ]
     ),
     
-    # ==================== 兜底流程模块 ====================
+    # ==================== 兜底流程模块（深度多轮对话测试） ====================
     TestCase(
-        id="FB-001",
-        name="触发兜底流程（情绪投诉）",
+        id="DF-001",
+        name="情绪激动投诉完整流程",
         category="兜底流程",
-        description="验证用户不满时能进入兜底流程",
+        description="用户情绪激动投诉，经历安抚→澄清→收集→确认→创建工单的完整流程",
         steps=[
             TestCaseStep(
-                user_message="垃圾系统，气死我了",
-                expected_keywords=["非常抱歉", "不好的体验"],
-                unexpected_keywords=[]
-            )
-        ]
-    ),
-    TestCase(
-        id="FB-002",
-        name="触发兜底流程（明确投诉）",
-        category="兜底流程",
-        description="验证用户明确投诉时能进入兜底流程",
-        steps=[
-            TestCaseStep(
-                user_message="我要投诉",
-                expected_keywords=["非常抱歉", "不好的体验"],
-                unexpected_keywords=[]
-            )
-        ]
-    ),
-    TestCase(
-        id="FB-003",
-        name="兜底流程收集用户信息",
-        category="兜底流程",
-        description="验证能正确收集用户联系方式",
-        steps=[
-            TestCaseStep(
-                user_message="我要投诉",
+                user_message="什么垃圾服务！充电桩充不进去电，我都等了半小时了！",
                 expected_keywords=["非常抱歉", "不好的体验"],
                 unexpected_keywords=[]
             ),
             TestCaseStep(
-                user_message="充电桩坏了，充不进去电",
+                user_message="太气人了，充电桩坏了也没人修，浪费我时间！",
                 expected_keywords=[],
                 unexpected_keywords=[]
             ),
             TestCaseStep(
-                user_message="手机13800138000，车牌京A12345",
-                expected_keywords=["手机号", "车牌号"],
+                user_message="手机13812345678",
+                expected_keywords=["手机号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="车牌沪A12345",
+                expected_keywords=["车牌号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="确认",
+                expected_keywords=["确认", "收到", "工单"],
+                unexpected_keywords=[]
+            )
+        ]
+    ),
+    TestCase(
+        id="DF-002",
+        name="用户分步骤提供信息",
+        category="兜底流程",
+        description="用户不一次性说完，而是分步骤提供问题、手机号、车牌",
+        steps=[
+            TestCaseStep(
+                user_message="我要投诉，充电桩有问题",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="充不进去电，在虹桥火车站充电站",
+                expected_keywords=[],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="13912345678",
+                expected_keywords=["手机号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="沪B88888",
+                expected_keywords=["车牌号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="对的，没问题",
+                expected_keywords=["确认", "收到"],
+                unexpected_keywords=[]
+            )
+        ]
+    ),
+    TestCase(
+        id="DF-003",
+        name="用户需要更正信息",
+        category="兜底流程",
+        description="用户提供的信息有误，需要反复更正",
+        steps=[
+            TestCaseStep(
+                user_message="我要投诉，充电桩多扣钱了",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="手机13711112222",
+                expected_keywords=["手机号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="不对，手机号是13711113333",
+                expected_keywords=["手机号", "已记录", "更新"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="车牌沪C12345",
+                expected_keywords=["车牌号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="车牌错了，应该是沪C12346",
+                expected_keywords=["车牌号", "已记录", "更新"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="确认",
+                expected_keywords=["确认", "收到"],
+                unexpected_keywords=[]
+            )
+        ]
+    ),
+    TestCase(
+        id="DF-004",
+        name="用户中途取消投诉",
+        category="兜底流程",
+        description="用户开始投诉后，中途突然想取消",
+        steps=[
+            TestCaseStep(
+                user_message="我要投诉，充电桩坏了",
+                expected_keywords=["非常抱歉", "不好的体验"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="手机13612349876",
+                expected_keywords=["手机号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="算了，不用处理了",
+                expected_keywords=["好的", "已取消"],
+                unexpected_keywords=["确认", "工单"]
+            )
+        ]
+    ),
+    TestCase(
+        id="DF-005",
+        name="模糊问题需要多次澄清",
+        category="兜底流程",
+        description="用户一开始只说模糊问题，系统需要多次追问才能了解清楚",
+        steps=[
+            TestCaseStep(
+                user_message="充不进去电",
+                expected_keywords=["非常抱歉", "不好的体验", "具体"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="在浦东机场充电站",
+                expected_keywords=[],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="就是3号桩，屏幕显示故障",
+                expected_keywords=[],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="13598765432",
+                expected_keywords=["手机号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="沪D98765",
+                expected_keywords=["车牌号", "已记录"],
+                unexpected_keywords=[]
+            ),
+            TestCaseStep(
+                user_message="对的，确认",
+                expected_keywords=["确认", "收到"],
                 unexpected_keywords=[]
             )
         ]
