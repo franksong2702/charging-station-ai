@@ -228,11 +228,39 @@ def email_sending_node(
     # 如果有截断索引，只展示截断后的对话（这次投诉的对话）
     conversation_html = ""
     if state.conversation_history:
-        # 【临时验证方案】暂时忽略 conversation_truncate_index，直接展示最近10条对话
-        # 用于快速验证问题是否与 truncate_index 相关
-        display_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
-        logger.info(f"邮件发送节点 - 【临时验证】忽略 truncate_index，展示对话数: {len(display_history)}")
-        logger.info(f"邮件发送节点 - 【临时验证】state.conversation_truncate_index 的值: {getattr(state, 'conversation_truncate_index', 'NOT SET')}")
+        # 【调试日志】输出完整的 state 信息
+        logger.info("=" * 100)
+        logger.info("邮件发送节点 - 调试信息")
+        logger.info("=" * 100)
+        
+        # 1. 输出 conversation_truncate_index
+        truncate_index = getattr(state, 'conversation_truncate_index', None)
+        logger.info(f"【调试】conversation_truncate_index = {truncate_index}")
+        
+        # 2. 输出完整的 conversation_history
+        logger.info(f"【调试】state.conversation_history 长度 = {len(state.conversation_history) if state.conversation_history else 0}")
+        if state.conversation_history:
+            for i, msg in enumerate(state.conversation_history):
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')
+                logger.info(f"【调试】  [{i+1}] {role}: {content[:80]}...")
+        
+        # 3. 构建 display_history（先按原来的逻辑）
+        display_history = []
+        if state.conversation_history:
+            # 暂时不使用 truncate_index，直接用全部对话用于调试
+            display_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
+        
+        # 4. 输出 display_history
+        logger.info(f"【调试】display_history 长度 = {len(display_history)}")
+        if display_history:
+            for i, msg in enumerate(display_history):
+                role = msg.get('role', 'unknown')
+                content = msg.get('content', '')
+                logger.info(f"【调试】  display[{i+1}] {role}: {content[:80]}...")
+        
+        logger.info("=" * 100)
+        # 【调试日志结束】
         
         conversation_items = []
         for msg in display_history:
