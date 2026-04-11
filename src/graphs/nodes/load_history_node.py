@@ -78,6 +78,7 @@ def load_history_node(
         license_plate = ""
         problem_summary = ""
         entry_problem = ""
+        conversation_truncate_index = 0
         
         if latest_record:
             fallback_phase = str(latest_record.fallback_phase or "")
@@ -85,6 +86,7 @@ def load_history_node(
             license_plate = str(latest_record.license_plate or "")
             problem_summary = str(latest_record.problem_summary or "")
             entry_problem = str(latest_record.entry_problem or "")
+            conversation_truncate_index = int(latest_record.conversation_truncate_index or 0)
             
             # 【新增：检查兜底流程状态是否过期
             if fallback_phase and latest_record.created_at:
@@ -121,6 +123,8 @@ def load_history_node(
             problem_summary = state.problem_summary
         if state.entry_problem:
             entry_problem = state.entry_problem
+        if state.conversation_truncate_index:
+            conversation_truncate_index = state.conversation_truncate_index
         
         # 构建对话历史（按时间正序）
         for record in reversed(records):
@@ -143,7 +147,8 @@ def load_history_node(
             phone=phone,
             license_plate=license_plate,
             problem_summary=problem_summary,
-            entry_problem=entry_problem
+            entry_problem=entry_problem,
+            conversation_truncate_index=conversation_truncate_index
         )
         
     except Exception as e:

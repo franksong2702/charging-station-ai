@@ -32,6 +32,7 @@ class GlobalState(BaseModel):
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
     case_created: bool = Field(default=False, description="工单是否已创建")
+    conversation_truncate_index: int = Field(default=0, description="对话截断索引，用于邮件中只展示投诉相关的对话")
     # 协商处理相关
     negotiate_phase: str = Field(default="", description="协商处理阶段：asking/proposing/confirming/escalating")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
@@ -174,6 +175,7 @@ class LoadHistoryInput(BaseModel):
     license_plate: str = Field(default="", description="车牌号（来自 GraphInput）")
     problem_summary: str = Field(default="", description="问题总结（来自 GraphInput）")
     entry_problem: str = Field(default="", description="用户问题描述（来自 GraphInput）")
+    conversation_truncate_index: int = Field(default=0, description="对话截断索引（来自 GraphInput）")
 
 
 class LoadHistoryOutput(BaseModel):
@@ -185,6 +187,7 @@ class LoadHistoryOutput(BaseModel):
     license_plate: str = Field(default="", description="用户车牌号")
     problem_summary: str = Field(default="", description="问题总结")
     entry_problem: str = Field(default="", description="用户问题描述")
+    conversation_truncate_index: int = Field(default=0, description="对话截断索引")
 
 
 # ==================== 保存对话历史节点 ====================
@@ -202,6 +205,7 @@ class SaveHistoryInput(BaseModel):
     problem_summary: str = Field(default="", description="问题总结")
     entry_problem: str = Field(default="", description="用户问题描述")
     user_supplement: str = Field(default="", description="用户补充内容")
+    conversation_truncate_index: Optional[int] = Field(default=0, description="对话截断索引")
 
 
 class SaveHistoryOutput(BaseModel):
@@ -262,6 +266,8 @@ class FallbackOutput(BaseModel):
     user_supplement: str = Field(default="", description="用户补充内容")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认")
+    # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
+    conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
     # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
     conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
 

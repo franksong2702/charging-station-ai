@@ -27,6 +27,7 @@ class ConversationHistory(Base):
     problem_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="问题总结")
     entry_problem: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="进入兜底时的问题描述")
     user_supplement: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="用户补充信息")
+    conversation_truncate_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0, comment="对话截断索引")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     
     __table_args__ = (

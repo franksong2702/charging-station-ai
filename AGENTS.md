@@ -86,6 +86,47 @@
 
 ## 关键修复记录（2026-04-04 新增）
 
+### 2026-04-11: 多轮对话状态保持问题修复
+**问题描述**:
+- 多轮对话状态没有保持：第一轮对话后，数据库中的 fallback_phase、problem_summary、entry_problem 等字段都是空的
+- 第二轮对话时，AI 每轮都重复问"方便提供一下您的手机号和车牌号吗？"
+
+**问题根源**:
+- fallback_node.py 中的默认阶段逻辑（设置 entry_problem、phase、problem_summary）放在了第 327 行的 if 块的外面
+- 当 phase 是空字符串时，代码进入了第 327 行的 if 块，执行了 327-444 行的逻辑，然后提前 return 了，根本没有执行到默认阶段逻辑
+- 因此 entry_problem、phase（fallback_phase）、problem_summary 都是空的
+
+**解决方案**:
+1. **修复 fallback_node.py 代码结构**：
+   - 将默认阶段逻辑（设置 entry_problem、phase、problem_summary）移到了第 327 行的 if 块的开头
+   - 删除了后面重复的默认阶段逻辑
+   - 确保当 phase 是空字符串时，先执行默认阶段逻辑，设置好 entry_problem、phase、problem_summary，再执行后续逻辑
+
+2. **修复 state.py 中的字段缺失**：
+   - 在 GlobalState 中添加了 conversation_truncate_index 字段
+   - 在 LoadHistoryInput、LoadHistoryOutput、SaveHistoryInput 中都添加了 conversation_truncate_index 字段
+   - 在 FallbackOutput 中也添加了 conversation_truncate_index 字段
+
+3. **修复数据库模型**：
+   - 在 storage/database/shared/model.py 的 ConversationHistory 模型中添加了 conversation_truncate_index 字段
+   - 执行了 SQL 语句在实际数据库中添加了该列
+
+4. **修复 save_history_node.py**：
+   - 修改了保存逻辑，直接给 record 对象的所有字段赋值，不管有没有条件
+   - 确保所有有值的字段都被保存到数据库中
+
+**修改文件**:
+- `src/graphs/state.py` - 添加 conversation_truncate_index 字段到 GlobalState 和相关 Input/Output 类
+- `src/storage/database/shared/model.py` - ConversationHistory 模型添加 conversation_truncate_index 字段
+- `src/graphs/nodes/fallback_node.py` - 修复代码结构，将默认阶段逻辑移到正确位置
+- `src/graphs/nodes/save_history_node.py` - 修复保存逻辑，直接给所有字段赋值
+
+**测试结果**:
+| 测试场景 | 数据库字段 | 测试结果 |
+|---------|-----------|---------|
+| 第一轮对话用户说"我要投诉" | fallback_phase=summary_collect, problem_summary=有值, entry_problem=有值 | ✅ 通过 |
+| 第二轮对话用户提供手机号车牌 | 正确加载第一轮状态 | ✅ 通过 |
+
 ### 2026-04-05: 确认同义词响应完全失效问题修复
 **问题描述**:
 - 所有 CONFIRM 测试的 Round 4（用户说确认同义词，如"对"、"是的"、"好的"、"行"）都返回空响应或无关响应

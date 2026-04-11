@@ -193,6 +193,9 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     conversation_history = state.conversation_history or []
     conversation_truncate_index = state.conversation_truncate_index or 0
     
+    # 【修复】给 reply_content 一个默认值，确保在所有情况下都被赋值
+    reply_content = "非常抱歉，让我帮您处理这个问题。"
+    
     # 记录截断索引（如果还没有记录）
     if conversation_truncate_index == 0:
         conversation_truncate_index = len(conversation_history)
@@ -326,6 +329,25 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     # ==================== 总结与收集阶段（收集手机号和车牌号） ====================
     if phase == "summary_collect" or phase == "collect_info" or phase == "" or phase == "ask_problem":
+        # ==================== 【修复】默认阶段逻辑移到这里 ====================
+        # 如果没有设置 entry_problem，设置为当前用户消息（排除手机号/车牌号相关）
+        if not entry_problem:
+            # 简单判断：如果消息包含"手机"或"车牌"，可能是在提供信息而不是问题描述
+            if "手机" in user_message or "车牌" in user_message or len(user_message) < 5:
+                # 太短或只是在提供信息，进入澄清阶段
+                phase = "clarify"
+                reply_content = """非常抱歉给您带来了不好的体验！
+
+您能跟我说说具体遇到了什么情况吗？我先帮您看看～"""
+            else:
+                # 有明确问题描述，设置 entry_problem 并进入 summary_collect
+                entry_problem = user_message
+                phase = "summary_collect"
+                # 【确定性修复】直接设置 problem_summary，简单做"用户"到"您"的替换
+                problem_summary = entry_problem.replace("用户", "您")
+                reply_content = f"""好的，情况我了解了！
+为了帮您更好地处理问题，方便提供一下您的手机号和车牌号吗？"""
+        
         # 提取用户消息中的信息（包括时间、地点）
         extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
         extracted_phone = extracted.get("phone", "")
@@ -492,6 +514,9 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             logger.info(f"兜底流程 - 用户在确认阶段补充信息: {', '.join(updated)}")
             # 重新收集，然后再确认
             phase = "summary_collect"
+            # 设置 reply_content
+            reply_content = f"""好的，记录了{"，".join(updated)}！
+麻烦再提供一下您的其他信息好吗？"""
         else:
             # 没有信息更新，友好提示
             reply_content = "收到～请确认以上信息是否准确，准确的话回复\"确认\"。"
@@ -520,25 +545,6 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             case_confirmed=True,
             conversation_truncate_index=conversation_truncate_index
         )
-    
-    # ==================== 默认：进入澄清安抚阶段 ====================
-    # 如果没有设置 entry_problem，设置为当前用户消息（排除手机号/车牌号相关）
-    if not entry_problem:
-        # 简单判断：如果消息包含"手机"或"车牌"，可能是在提供信息而不是问题描述
-        if "手机" in user_message or "车牌" in user_message or len(user_message) < 5:
-            # 太短或只是在提供信息，进入澄清阶段
-            phase = "clarify"
-            reply_content = """非常抱歉给您带来了不好的体验！
-
-您能跟我说说具体遇到了什么情况吗？我先帮您看看～"""
-        else:
-            # 有明确问题描述，设置 entry_problem 并进入 summary_collect
-            entry_problem = user_message
-            phase = "summary_collect"
-            # 【确定性修复】直接设置 problem_summary，简单做"用户"到"您"的替换
-            problem_summary = entry_problem.replace("用户", "您")
-            reply_content = f"""好的，情况我了解了！
-为了帮您更好地处理问题，方便提供一下您的手机号和车牌号吗？"""
     
     return FallbackOutput(
         reply_content=reply_content,
