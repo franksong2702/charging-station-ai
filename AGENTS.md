@@ -86,11 +86,12 @@
 
 ## 关键修复记录（2026-04-04 新增）
 
-### 2026-04-12: 兜底流程"先共情追问，再收集信息"优化
+### 2026-04-12: 兜底流程"先共情追问，再收集信息"优化及确认环节修复
 **问题描述**:
 - FALL-002: 用户情绪激动，AI 没有先安抚情绪就直接问手机号/车牌号
 - COMP-003: 用户信息不完整，AI 没有先追问地点和时间就直接收集手机号
-- **后续发现问题**: AI 卡在追问详情阶段，无法进入信息收集阶段
+- **后续发现问题1**: AI 卡在追问详情阶段，无法进入信息收集阶段
+- **后续发现问题2**: 用户说确认后，AI 还是重复请确认以上信息是否准确，无法创建工单
 
 **解决方案**:
 1. **新增 `ask_problem` 阶段**：用于共情追问用户遇到了什么问题
@@ -98,9 +99,15 @@
 3. **保持 `summary_collect` 阶段**：用于收集手机号/车牌号
 4. **最终修改后的流程**：`ask_problem` → `summary_collect` → `confirm` → `done`
 5. **修复卡住问题**：简化判断条件，确保用户提供问题后能顺利进入信息收集阶段
+6. **修复确认环节问题**：
+   - SaveHistoryOutput 中添加 case_confirmed 字段
+   - save_history_node.py 中所有返回都包含 case_confirmed 字段
+   - fallback_node.py 中 confirm 阶段把 _is_confirm 判断提前到最前面
 
 **修改文件**:
-- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，移除 clarify 阶段，简化流程
+- `src/graphs/state.py` - SaveHistoryOutput 中添加 case_confirmed 字段
+- `src/graphs/nodes/save_history_node.py` - 所有返回都包含 case_confirmed 字段
+- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，移除 clarify 阶段，简化流程，确认阶段把 _is_confirm 判断提前
 
 **测试结果**:
 | 测试场景 | 用户输入 | AI 回复 | 测试结果 |

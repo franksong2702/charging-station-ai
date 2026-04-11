@@ -217,6 +217,7 @@ class SaveHistoryOutput(BaseModel):
     """保存对话历史节点的输出"""
     saved: bool = Field(default=True, description="是否保存成功")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="最新的对话历史（包含刚保存的这一轮）")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
 
 
 # ==================== 不满意处理节点 ====================

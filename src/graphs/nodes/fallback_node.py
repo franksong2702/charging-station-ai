@@ -540,7 +540,27 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     # ==================== 确认阶段 ====================
     if phase == "confirm":
-        # 先检查是否在取消
+        # 【优先检查】用户是否在确认
+        if _is_confirm(user_message):
+            logger.info("兜底流程 - 用户确认，准备创建工单")
+            # 【重要】用户确认后，直接返回，让图的条件节点处理
+            reply_content = f"""✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
+手机号：{phone}
+车牌号：{license_plate}
+情况：{problem_summary}"""
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="done",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=problem_summary,
+                user_supplement="",
+                entry_problem=entry_problem,
+                case_confirmed=True,
+                conversation_truncate_index=conversation_truncate_index
+            )
+        
+        # 再检查是否在取消
         if _is_cancel(user_message):
             logger.info("兜底流程 - 用户取消，退出确认阶段")
             return FallbackOutput(
@@ -555,7 +575,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                 conversation_truncate_index=0
             )
         
-        # 先提取用户可能的信息更新
+        # 提取用户可能的信息更新
         extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
         extracted_phone = extracted.get("phone", "")
         extracted_plate = extracted.get("license_plate", "")
@@ -576,7 +596,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             entry_problem = extracted_problem
             updated.append(f"情况 {problem_summary}")
         
-        # 【新增】补充问题细节（时间、地点）
+        # 补充问题细节（时间、地点）
         if (extracted_time or extracted_location) and problem_summary:
             new_details = []
             if extracted_time:
@@ -587,26 +607,6 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             if new_details:
                 problem_summary = f"{problem_summary}，{'，'.join(new_details)}"
                 updated.append(f"情况 {problem_summary}")
-        
-        # 检查用户是否在确认
-        if _is_confirm(user_message):
-            logger.info("兜底流程 - 用户确认，准备创建工单")
-            # 【重要】用户确认后，直接返回，让图的条件节点处理
-            reply_content = f"""✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。
-手机号：{phone}
-车牌号：{license_plate}
-情况：{problem_summary}"""
-            return FallbackOutput(
-                reply_content=reply_content,
-                fallback_phase="done",
-                phone=phone,
-                license_plate=license_plate,
-                problem_summary=problem_summary,
-                user_supplement="",
-                entry_problem=entry_problem,
-                case_confirmed=True,
-                conversation_truncate_index=conversation_truncate_index
-            )
         elif updated:
             # 有信息更新，重新整理信息让用户确认
             reply_content = f"""好的，更新了{"，".join(updated)}！

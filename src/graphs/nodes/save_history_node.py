@@ -42,14 +42,16 @@ def save_history_node(
     if not state.user_id:
         return SaveHistoryOutput(
             saved=True,
-            conversation_history=updated_conversation_history
+            conversation_history=updated_conversation_history,
+            case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
     
     # 如果消息为空，跳过保存到数据库，但还是返回最新的 conversation_history
     if not state.user_message or not state.reply_content:
         return SaveHistoryOutput(
             saved=True,
-            conversation_history=updated_conversation_history
+            conversation_history=updated_conversation_history,
+            case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
     
     session = None
@@ -89,7 +91,8 @@ def save_history_node(
         logger.info(f"保存对话历史成功 - user_id: {state.user_id}, fallback_phase: {state.fallback_phase}")
         return SaveHistoryOutput(
             saved=True,
-            conversation_history=updated_conversation_history
+            conversation_history=updated_conversation_history,
+            case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
         
     except Exception as e:
@@ -99,7 +102,8 @@ def save_history_node(
         logger.error(f"保存对话历史失败 - Exception: {type(e).__name__}: {e}")
         return SaveHistoryOutput(
             saved=False,
-            conversation_history=updated_conversation_history
+            conversation_history=updated_conversation_history,
+            case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
     finally:
         if session:
