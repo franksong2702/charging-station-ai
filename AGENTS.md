@@ -86,6 +86,37 @@
 
 ## 关键修复记录（2026-04-04 新增）
 
+### 2026-04-05: 确认同义词响应完全失效问题修复
+**问题描述**:
+- 所有 CONFIRM 测试的 Round 4（用户说确认同义词，如"对"、"是的"、"好的"、"行"）都返回空响应或无关响应
+- 当用户确认信息后，AI 应该回复"✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。"
+
+**问题根源**:
+- 当用户在兜底流程 confirm 阶段确认时，fallback 节点正确返回了 reply_content，但在后续的 create_case → email_sending → clear_fallback_state 链路中，reply_content 没有被正确保留
+- clear_fallback_state 节点没有优先使用传入的 reply_content
+- email_sending 节点也没有优先使用传入的 reply_content
+
+**解决方案**:
+1. **修改 clear_fallback_state 节点**:
+   - 优先使用传入的 state.reply_content
+   - 只有当没有传入 reply_content 时，才根据退出意图生成新的回复
+   
+2. **修改 email_sending 节点**:
+   - 优先使用传入的 state.reply_content
+   - 只有当没有传入 reply_content 时，才使用默认的回复话术
+
+**修改文件**:
+- `src/graphs/nodes/clear_fallback_state_node.py` - 优先使用传入的 reply_content
+- `src/graphs/nodes/email_sending_node.py` - 优先使用传入的 reply_content
+
+**测试结果**:
+| 用户输入 | AI 响应 | 测试结果 |
+|---------|--------|---------|
+| "对" | ✅ 收到您的问题... | ✅ 通过 |
+| "是的" | ✅ 收到您的问题... | ✅ 通过 |
+| "好的" | ✅ 收到您的问题... | ✅ 通过 |
+| "行" | ✅ 收到您的问题... | ✅ 通过 |
+
 ### 2026-04-05: 兜底流程三大问题修复
 **问题描述**:
 1. 槽位状态不一致：明明已显示车牌号，但总结却说"尚未提供车牌号"

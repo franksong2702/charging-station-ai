@@ -153,14 +153,16 @@ def clear_fallback_state_node(
 
     # 生成友好回复（针对退出兜底的情况）
     user_message = state.user_message or ""
-    reply_content = ""
+    reply_content = state.reply_content or ""  # 先使用传入的 reply_content
     
-    # 检查用户是否在表达退出意图
-    exit_keywords = ["算了", "不用了", "不处理了", "取消", "下次再说", "太麻烦", "自己打", "自己联系"]
-    is_exit = any(keyword in user_message for keyword in exit_keywords)
-    
-    if is_exit:
-        reply_content = "好的，理解！如有需要随时联系我们。祝您生活愉快～"
+    # 如果没有传入 reply_content，再检查用户是否在表达退出意图
+    if not reply_content:
+        # 检查用户是否在表达退出意图
+        exit_keywords = ["算了", "不用了", "不处理了", "取消", "下次再说", "太麻烦", "自己打", "自己联系"]
+        is_exit = any(keyword in user_message for keyword in exit_keywords)
+        
+        if is_exit:
+            reply_content = "好的，理解！如有需要随时联系我们。祝您生活愉快～"
 
     if not state.user_id:
         logger.info("无用户 ID，跳过清除状态")
