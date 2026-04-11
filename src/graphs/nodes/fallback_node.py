@@ -83,18 +83,33 @@ def _extract_info_by_regex(user_message: str) -> dict:
         "license_plate": ""
     }
     
+    # 【预处理】去除用户消息中的所有空格，便于匹配
+    cleaned_message = re.sub(r'\s+', '', user_message)
+    
     # 1. 提取手机号：11位数字，以1开头
     phone_pattern = r'1\d{10}'
-    phone_matches = re.findall(phone_pattern, user_message)
+    phone_matches = re.findall(phone_pattern, cleaned_message)
     if phone_matches:
         result["phone"] = phone_matches[0]
     
     # 2. 提取车牌号：中文省份简称 + 字母 + 数字/字母（普通蓝牌、绿牌等）
-    # 匹配规则：省份简称（京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼）+ 1个字母 + 5-6位数字/字母
-    plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{5,6}'
-    plate_matches = re.findall(plate_pattern, user_message.upper())
+    # 匹配规则：
+    # - 省份简称（京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼）
+    # - 1个字母
+    # - 5-6位数字/字母（支持绿牌的6位）
+    # 【优化】先在原始消息中匹配（允许空格），如果没匹配到再在清理后的消息中匹配
+    plate_pattern_with_space = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼]\s*[A-Z]\s*[A-Z0-9]{5,6}'
+    plate_matches = re.findall(plate_pattern_with_space, user_message.upper())
+    
     if plate_matches:
-        result["license_plate"] = plate_matches[0]
+        # 匹配到了，去除结果中的空格
+        result["license_plate"] = re.sub(r'\s+', '', plate_matches[0])
+    else:
+        # 在原始消息中没匹配到，试试清理后的消息
+        plate_pattern_no_space = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{5,6}'
+        plate_matches_clean = re.findall(plate_pattern_no_space, cleaned_message.upper())
+        if plate_matches_clean:
+            result["license_plate"] = plate_matches_clean[0]
     
     return result
 
