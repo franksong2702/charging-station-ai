@@ -53,17 +53,11 @@ def save_history_node(
             case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
         
-        # 如果 fallback_phase = "done"，表示兜底已完成，清空兜底状态
+        # 如果 fallback_phase = "done"，表示兜底已完成，但我们不清空状态
+        # 因为后面还需要经过 cond_fallback 节点来判断是否创建工单
+        # 清空状态的动作放在 clear_fallback_state 节点中完成
         if state.fallback_phase == "done":
-            # 兜底完成，清空状态
-            record.fallback_phase = ""
-            record.phone = ""
-            record.license_plate = ""
-            record.problem_summary = ""
-            record.entry_problem = ""
-            record.user_supplement = ""
-            record.conversation_truncate_index = 0
-            logger.info(f"兜底流程完成，清空用户 {state.user_id} 的兜底状态")
+            logger.info(f"兜底流程完成，保留状态用于后续 cond_fallback 判断")
         
         # 【调试日志】打印 record 的内容
         logger.info(f"保存对话历史 - 准备保存的 record: fallback_phase={record.fallback_phase}, phone={record.phone}, license_plate={record.license_plate}, problem_summary={record.problem_summary}, entry_problem={record.entry_problem}")

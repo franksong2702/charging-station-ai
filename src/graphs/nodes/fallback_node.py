@@ -474,15 +474,17 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
 
 如有其他问题，随时可以问我。"""
             
+            # 【重要】保持 fallback_phase="confirm"，不要改成 "done"
+            # 因为后面还需要经过 cond_fallback 节点来判断是否创建工单
             return FallbackOutput(
                 reply_content=reply_content,
-                fallback_phase="done",
+                fallback_phase="confirm",  # 保持在 confirm 阶段
                 phone=phone,
                 license_plate=license_plate,
                 problem_summary=problem_summary,
                 user_supplement="",
                 entry_problem=entry_problem,
-                case_confirmed=True,
+                case_confirmed=True,  # 但是设置 case_confirmed=True
                 conversation_truncate_index=conversation_truncate_index
             )
         
@@ -532,19 +534,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                 conversation_truncate_index=conversation_truncate_index
             )
     
-    # ==================== 已完成阶段 ====================
-    if phase == "done":
-        return FallbackOutput(
-            reply_content="您的问题已提交，工作人员会尽快联系您。",
-            fallback_phase="done",
-            phone=phone,
-            license_plate=license_plate,
-            problem_summary=problem_summary,
-            user_supplement="",
-            entry_problem=entry_problem,
-            case_confirmed=True,
-            conversation_truncate_index=conversation_truncate_index
-        )
+
     
     return FallbackOutput(
         reply_content=reply_content,
