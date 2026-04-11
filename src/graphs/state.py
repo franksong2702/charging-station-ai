@@ -176,6 +176,7 @@ class LoadHistoryInput(BaseModel):
     problem_summary: str = Field(default="", description="问题总结（来自 GraphInput）")
     entry_problem: str = Field(default="", description="用户问题描述（来自 GraphInput）")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引（来自 GraphInput）")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结（来自 GraphInput）")
 
 
 class LoadHistoryOutput(BaseModel):
@@ -188,6 +189,7 @@ class LoadHistoryOutput(BaseModel):
     problem_summary: str = Field(default="", description="问题总结")
     entry_problem: str = Field(default="", description="用户问题描述")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
 
 
 # ==================== 保存对话历史节点 ====================
@@ -206,6 +208,7 @@ class SaveHistoryInput(BaseModel):
     entry_problem: str = Field(default="", description="用户问题描述")
     user_supplement: str = Field(default="", description="用户补充内容")
     conversation_truncate_index: Optional[int] = Field(default=0, description="对话截断索引")
+    case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
 
 
 class SaveHistoryOutput(BaseModel):

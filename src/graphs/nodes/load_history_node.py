@@ -40,7 +40,9 @@ def load_history_node(
             phone=state.phone,
             license_plate=state.license_plate,
             problem_summary=state.problem_summary,
-            entry_problem=state.entry_problem
+            entry_problem=state.entry_problem,
+            conversation_truncate_index=state.conversation_truncate_index,
+            case_confirmed=False
         )
     
     session = None
@@ -65,7 +67,9 @@ def load_history_node(
                 phone=state.phone,
                 license_plate=state.license_plate,
                 problem_summary=state.problem_summary,
-                entry_problem=state.entry_problem
+                entry_problem=state.entry_problem,
+                conversation_truncate_index=state.conversation_truncate_index,
+                case_confirmed=state.case_confirmed
             )
         
         # 转换为对话历史格式，并按时间正序排列
@@ -79,6 +83,7 @@ def load_history_node(
         problem_summary = ""
         entry_problem = ""
         conversation_truncate_index = 0
+        case_confirmed = False
         
         if latest_record:
             fallback_phase = str(latest_record.fallback_phase or "")
@@ -87,6 +92,7 @@ def load_history_node(
             problem_summary = str(latest_record.problem_summary or "")
             entry_problem = str(latest_record.entry_problem or "")
             conversation_truncate_index = int(latest_record.conversation_truncate_index or 0)
+            case_confirmed = bool(latest_record.case_confirmed or False)
             
             # 【新增：检查兜底流程状态是否过期
             if fallback_phase and latest_record.created_at:
@@ -125,6 +131,9 @@ def load_history_node(
             entry_problem = state.entry_problem
         if state.conversation_truncate_index:
             conversation_truncate_index = state.conversation_truncate_index
+        # 如果 GraphInput 中传入了 case_confirmed，优先使用
+        if state.case_confirmed:
+            case_confirmed = state.case_confirmed
         
         # 构建对话历史（按时间正序）
         for record in reversed(records):
@@ -148,7 +157,8 @@ def load_history_node(
             license_plate=license_plate,
             problem_summary=problem_summary,
             entry_problem=entry_problem,
-            conversation_truncate_index=conversation_truncate_index
+            conversation_truncate_index=conversation_truncate_index,
+            case_confirmed=case_confirmed
         )
         
     except Exception as e:
@@ -160,7 +170,9 @@ def load_history_node(
             phone=state.phone,
             license_plate=state.license_plate,
             problem_summary=state.problem_summary,
-            entry_problem=state.entry_problem
+            entry_problem=state.entry_problem,
+            conversation_truncate_index=state.conversation_truncate_index,
+            case_confirmed=state.case_confirmed
         )
     finally:
         if session:

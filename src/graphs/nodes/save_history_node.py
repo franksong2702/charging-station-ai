@@ -49,7 +49,8 @@ def save_history_node(
             problem_summary=state.problem_summary if state.problem_summary else None,
             entry_problem=state.entry_problem if state.entry_problem else None,
             user_supplement=state.user_supplement if state.user_supplement else None,
-            conversation_truncate_index=state.conversation_truncate_index if state.conversation_truncate_index else None
+            conversation_truncate_index=state.conversation_truncate_index if state.conversation_truncate_index else None,
+            case_confirmed=state.case_confirmed if state.case_confirmed else False
         )
         
         # 如果 fallback_phase = "done"，表示兜底已完成，清空兜底状态
