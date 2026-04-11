@@ -70,6 +70,35 @@ def _is_cancel(user_message: str) -> bool:
     return False
 
 
+def _extract_info_by_regex(user_message: str) -> dict:
+    """
+    使用正则表达式提取手机号和车牌号（作为 LLM 的兜底机制）
+    :param user_message: 用户消息
+    :return: 包含 phone, license_plate 的字典
+    """
+    import re
+    
+    result = {
+        "phone": "",
+        "license_plate": ""
+    }
+    
+    # 1. 提取手机号：11位数字，以1开头
+    phone_pattern = r'1\d{10}'
+    phone_matches = re.findall(phone_pattern, user_message)
+    if phone_matches:
+        result["phone"] = phone_matches[0]
+    
+    # 2. 提取车牌号：中文省份简称 + 字母 + 数字/字母（普通蓝牌、绿牌等）
+    # 匹配规则：省份简称（京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼）+ 1个字母 + 5-6位数字/字母
+    plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼][A-Z][A-Z0-9]{5,6}'
+    plate_matches = re.findall(plate_pattern, user_message.upper())
+    if plate_matches:
+        result["license_plate"] = plate_matches[0]
+    
+    return result
+
+
 def _extract_info_by_llm(ctx: Context, user_message: str, check_complaint: bool = False) -> dict:
     """
     使用 LLM 从用户消息中提取手机号、车牌号、问题描述
@@ -78,6 +107,23 @@ def _extract_info_by_llm(ctx: Context, user_message: str, check_complaint: bool 
     :param check_complaint: 是否检测抱怨，如果是则自动生成道歉话术
     :return: 包含 phone, license_plate, problem, extra_apology 的字典
     """
+    # 【新增】先用正则表达式提取（兜底机制）
+    regex_result = _extract_info_by_regex(user_message)
+    regex_phone = regex_result.get("phone", "")
+    regex_plate = regex_result.get("license_plate", "")
+    
+    # 如果正则已经提取到了，直接返回（避免 LLM 犯错）
+    if regex_phone or regex_plate:
+        logger.info(f"兜底流程 - 正则提取成功: phone='{regex_phone}', plate='{regex_plate}'")
+        return {
+            "phone": regex_phone,
+            "license_plate": regex_plate,
+            "problem": "",
+            "time": "",
+            "location": "",
+            "extra_apology": ""
+        }
+    
     # 创建 LLM 客户端
     llm_client = create_llm_client(ctx)
     
@@ -356,6 +402,10 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
         extracted_time = extracted.get("time", "")
         extracted_location = extracted.get("location", "")
         
+        # 【调试日志】
+        logger.info(f"兜底流程 - 用户消息: '{user_message}'")
+        logger.info(f"兜底流程 - 提取结果: phone='{extracted_phone}', plate='{extracted_plate}', problem='{extracted_problem}'")
+        
         # 更新信息
         updated = []
         if extracted_phone:
@@ -404,6 +454,13 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
         if not license_plate:
             missing.append("车牌号")
         
+        # 【优化】检查用户是否只是在回应（如只说"手机号"或"车牌"）
+        is_just_responding = False
+        user_msg_lower = user_message.strip().lower()
+        if len(user_msg_lower) <= 10 and ("手机" in user_msg_lower or "车牌" in user_msg_lower or "号" in user_msg_lower):
+            is_just_responding = True
+            logger.info(f"兜底流程 - 用户只是在回应: {user_message}")
+        
         # 如果有信息更新，友好告知并继续收集
         if updated:
             if missing:
@@ -430,9 +487,14 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                     conversation_truncate_index=conversation_truncate_index
                 )
         else:
-            # 没有信息更新，友好询问
+            # 没有信息更新
             if missing:
-                reply_content = f"""方便提供一下您的{"和".join(missing)}吗？"""
+                if is_just_responding:
+                    # 用户只是在回应，稍微改变一下话术
+                    reply_content = f"""好的，麻烦您提供一下具体的{"和".join(missing)}号码哦？"""
+                else:
+                    # 正常询问
+                    reply_content = f"""方便提供一下您的{"和".join(missing)}吗？"""
             else:
                 # 信息完整，进入确认阶段
                 phase = "confirm"
