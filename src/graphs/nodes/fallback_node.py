@@ -439,19 +439,23 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
         if not entry_problem:
             # 简单判断：如果消息包含"手机"或"车牌"，可能是在提供信息而不是问题描述
             if "手机" in user_message or "车牌" in user_message or len(user_message) < 5:
-                # 太短或只是在提供信息，进入澄清阶段
+                # 太短或只是在提供信息，进入澄清阶段（【修复 FALL-002】添加情绪检测）
                 phase = "clarify"
-                reply_content = """非常抱歉给您带来了不好的体验！
-
+                apology_msg = _get_apology_message(user_message)
+                reply_content = f"""{apology_msg}
 您能跟我说说具体遇到了什么情况吗？我先帮您看看～"""
             else:
-                # 有明确问题描述，设置 entry_problem 并进入 summary_collect
+                # 有明确问题描述，设置 entry_problem 并进入 summary_collect（【修复 FALL-002】添加情绪检测）
                 entry_problem = user_message
                 phase = "summary_collect"
                 # 【确定性修复】直接设置 problem_summary，简单做"用户"到"您"的替换
                 problem_summary = entry_problem.replace("用户", "您")
-                reply_content = f"""好的，情况我了解了！
-为了帮您更好地处理问题，方便提供一下您的手机号和车牌号吗？"""
+                # 【修复 FALL-002】根据情绪选择合适的安抚话术
+                apology_msg = _get_apology_message(user_message)
+                reply_content = f"""{apology_msg}
+我已经记录了您的问题：
+{problem_summary}
+为了进一步核实，麻烦您提供一下手机号和车牌号。"""
         
         # 提取用户消息中的信息（包括时间、地点）
         extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
