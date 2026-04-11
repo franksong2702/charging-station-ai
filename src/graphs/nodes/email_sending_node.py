@@ -225,13 +225,13 @@ def email_sending_node(
     logger.info(f"邮件发送节点 - 手机: {phone}, 车牌: {license_plate}, 工单: {case_id}")
     logger.info(f"邮件发送节点 - state.conversation_history 长度: {len(state.conversation_history) if state.conversation_history else 0}")
     
-    # 构建对话记录 HTML（只展示最近20条，避免历史记录过长）
+    # 构建对话记录 HTML（使用完整对话历史）
     conversation_html = ""
     if state.conversation_history:
-        # 使用完整对话历史，最多保留最近 20 条
-        # 业务说明：邮件需要包含完整的用户对话历史（Round 1 到当前轮次）
-        # Round 4（用户确认）不包含新信息，但为了完整性仍然保留
-        display_history = state.conversation_history[-20:] if len(state.conversation_history) > 20 else state.conversation_history
+        # 使用完整对话历史，不限制条数
+        # 业务说明：邮件是内部工单，信息越完整越好
+        # 用户明确要求：12 轮对话要完整显示
+        display_history = state.conversation_history
         
         conversation_items = []
         for msg in display_history:
