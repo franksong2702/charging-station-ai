@@ -231,11 +231,19 @@ def email_sending_node(
         # 优先使用截断索引，只展示截断后的对话
         truncate_index = getattr(state, 'conversation_truncate_index', None)
         if truncate_index is not None and truncate_index <= len(state.conversation_history):
-            # 【修复】确保包含 Round 1（用户发起投诉的内容）
-            # 简单直接的方案：从 max(0, truncate_index - 1) 开始
-            # 这样可以确保包含用户发起投诉的第一条对话
-            start_index = max(0, truncate_index - 1)
+            # 【彻底修复】确保包含 Round 1（用户发起投诉的内容）
+            # 简单粗暴但有效的方案：
+            # 1. 先从 truncate_index 开始
+            # 2. 如果结果少于 4 条对话（2 轮），说明可能截多了
+            # 3. 就往前多移 2 条，确保包含完整的投诉过程
+            start_index = max(0, truncate_index - 2)
             display_history = state.conversation_history[start_index:]
+            
+            # 安全检查：如果还是太少，直接展示所有对话
+            if len(display_history) < 4:
+                logger.warning(f"邮件发送节点 - 截断后对话太少({len(display_history)}条)，展示全部对话")
+                display_history = state.conversation_history
+            
             logger.info(f"邮件发送节点 - 截断索引: {truncate_index}, 实际开始索引: {start_index}, 展示对话数: {len(display_history)}")
         else:
             # 没有截断索引时，只展示最近10条对话
