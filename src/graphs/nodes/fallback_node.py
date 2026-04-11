@@ -70,6 +70,46 @@ def _is_cancel(user_message: str) -> bool:
     return False
 
 
+def _detect_anger(user_message: str) -> bool:
+    """
+    判断用户是否表达了愤怒或强烈不满
+    :param user_message: 用户消息
+    :return: 是否愤怒
+    """
+    # 愤怒/强烈不满关键词
+    anger_keywords = [
+        "什么破系统", "垃圾系统", "气死我了", "太差了", "什么垃圾", "破系统", 
+        "烂系统", "什么东西", "太差劲", "太烂", "什么玩意儿", "破玩意儿",
+        "垃圾", "太差", "气死", "太气人"
+    ]
+    # 先去掉标点符号
+    msg = re.sub(r'[，。！？、\.\,\!\?\~\s]', '', user_message.lower())
+    for keyword in anger_keywords:
+        if keyword in msg:
+            return True
+    return False
+
+
+def _get_apology_message(user_message: str) -> str:
+    """
+    根据用户的愤怒程度，返回合适的安抚话术
+    :param user_message: 用户消息
+    :return: 安抚话术
+    """
+    if _detect_anger(user_message):
+        # 强烈愤怒，使用更强的安抚
+        apology_options = [
+            "非常抱歉给您带来了不好的体验！我理解您现在很生气，我先帮您看看问题。",
+            "真的非常抱歉让您遇到这样的问题！我能理解您的心情，我先帮您处理。",
+            "很抱歉让您有不愉快的体验！请您消消气，我来帮您看看怎么解决。"
+        ]
+        import random
+        return random.choice(apology_options)
+    else:
+        # 一般情况，正常安抚
+        return "非常抱歉给您带来了不好的体验！"
+
+
 def _extract_info_by_regex(user_message: str) -> dict:
     """
     使用正则表达式提取手机号和车牌号（作为 LLM 的兜底机制）
