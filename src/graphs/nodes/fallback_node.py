@@ -390,9 +390,12 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                     conversation_truncate_index=conversation_truncate_index
                 )
             else:
-                # 信息不完整，继续收集
-                reply_content = f"""好的，情况我了解了！
-为了帮您更好地处理问题，方便提供一下您的{"和".join(missing)}吗？"""
+                # 信息不完整，继续收集（【修复 FALL-002】使用情绪检测）
+                apology_msg = _get_apology_message(user_message)
+                reply_content = f"""{apology_msg}
+我已经记录了您的问题：
+{problem_summary}
+为了进一步核实，麻烦您提供一下{"和".join(missing)}。"""
                 return FallbackOutput(
                     reply_content=reply_content,
                     fallback_phase=phase,
@@ -405,15 +408,16 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                     conversation_truncate_index=conversation_truncate_index
                 )
         
-        # 用户还没说清楚问题，先安抚并引导
+        # 用户还没说清楚问题，先安抚并引导（【修复 FALL-002】使用情绪检测）
         # 特别针对"退款"类诉求，先问清楚是想了解规则还是有具体订单
+        apology_msg = _get_apology_message(user_message)
         if "退款" in user_message or "退钱" in user_message:
-            reply_content = """您好！请问您是想了解退款规则，还是有具体的订单需要退款呢？
+            reply_content = f"""{apology_msg}
+请问您是想了解退款规则，还是有具体的订单需要退款呢？
 
 如果是想了解规则，我可以直接告诉您；如果是有具体订单需要处理，我来帮您登记反馈～"""
         else:
-            reply_content = """非常抱歉给您带来了不好的体验！
-
+            reply_content = f"""{apology_msg}
 您能跟我说说具体遇到了什么情况吗？我先帮您看看～"""
         
         return FallbackOutput(
