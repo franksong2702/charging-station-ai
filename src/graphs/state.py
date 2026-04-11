@@ -301,6 +301,7 @@ class ClearFallbackStateOutput(BaseModel):
     problem_summary: str = Field(default="", description="清空后的问题总结")
     case_confirmed: bool = Field(default=False, description="重置确认状态")
     intent: str = Field(default="usage_guidance", description="重置为默认意图")
+    reply_content: str = Field(default="", description="给用户的友好回复内容")
 
 
 # ==================== 条件判断节点输入类型 ====================

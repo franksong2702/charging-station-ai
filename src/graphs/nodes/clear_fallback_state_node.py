@@ -151,6 +151,17 @@ def clear_fallback_state_node(
     # 保存传入的 case_confirmed 值（用于路由判断）
     was_case_confirmed = state.case_confirmed
 
+    # 生成友好回复（针对退出兜底的情况）
+    user_message = state.user_message or ""
+    reply_content = ""
+    
+    # 检查用户是否在表达退出意图
+    exit_keywords = ["算了", "不用了", "不处理了", "取消", "下次再说", "太麻烦", "自己打", "自己联系"]
+    is_exit = any(keyword in user_message for keyword in exit_keywords)
+    
+    if is_exit:
+        reply_content = "好的，理解！如有需要随时联系我们。祝您生活愉快～"
+
     if not state.user_id:
         logger.info("无用户 ID，跳过清除状态")
         return ClearFallbackStateOutput(
@@ -160,7 +171,8 @@ def clear_fallback_state_node(
             license_plate="",
             problem_summary="",
             case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
-            intent=new_intent
+            intent=new_intent,
+            reply_content=reply_content
         )
 
     session = None
@@ -193,7 +205,8 @@ def clear_fallback_state_node(
             license_plate="",
             problem_summary="",
             case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
-            intent=new_intent
+            intent=new_intent,
+            reply_content=reply_content
         )
 
     except Exception as e:
@@ -207,7 +220,8 @@ def clear_fallback_state_node(
             license_plate="",
             problem_summary="",
             case_confirmed=was_case_confirmed,  # 保留原值，用于路由判断
-            intent=new_intent
+            intent=new_intent,
+            reply_content=reply_content
         )
     finally:
         if session:
