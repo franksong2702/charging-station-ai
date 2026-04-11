@@ -1,0 +1,62 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__(<p>__start__</p>)
+	load_history(load_history<hr/><small><em>type = task</em></small>)
+	cond_intent_recognition(cond_intent_recognition<hr/><small><em>type = condition</em></small>)
+	cond_fallback(cond_fallback<hr/><small><em>type = condition</em></small>)
+	cond_after_save(cond_after_save<hr/><small><em>type = condition</em></small>)
+	intent_recognition(intent_recognition<hr/><small><em>type = agent
+llm_cfg = config/intent_recognition_llm_cfg.json</em></small>)
+	query_rewrite(query_rewrite<hr/><small><em>type = agent
+llm_cfg = config/query_rewrite_llm_cfg.json</em></small>)
+	knowledge_qa(knowledge_qa<hr/><small><em>type = agent
+llm_cfg = config/knowledge_qa_llm_cfg.json</em></small>)
+	feedback(feedback<hr/><small><em>type = task</em></small>)
+	email_sending(email_sending<hr/><small><em>type = task</em></small>)
+	save_history(save_history<hr/><small><em>type = task</em></small>)
+	save_record(save_record<hr/><small><em>type = task</em></small>)
+	dissatisfied(dissatisfied<hr/><small><em>type = task</em></small>)
+	satisfied(satisfied<hr/><small><em>type = task</em></small>)
+	fallback(fallback<hr/><small><em>type = task</em></small>)
+	negotiate(negotiate<hr/><small><em>type = agent
+llm_cfg = config/negotiate_llm_cfg.json</em></small>)
+	create_case(create_case<hr/><small><em>type = task</em></small>)
+	clear_fallback_state(clear_fallback_state<hr/><small><em>type = task</em></small>)
+	mark_as_save_record(mark_as_save_record<hr/><small><em>type = task</em></small>)
+	mark_as_cond_fallback(mark_as_cond_fallback<hr/><small><em>type = task</em></small>)
+	mark_as_cond_negotiate(mark_as_cond_negotiate<hr/><small><em>type = task</em></small>)
+	__end__(<p>__end__</p>)
+	__start__ --> load_history;
+	cond_fallback -. &nbsp;继续兜底&nbsp; .-> __end__;
+	cond_fallback -. &nbsp;创建工单&nbsp; .-> create_case;
+	create_case --> email_sending;
+	dissatisfied --> mark_as_save_record;
+	email_sending --> clear_fallback_state;
+	fallback --> mark_as_cond_fallback;
+	feedback --> mark_as_save_record;
+	intent_recognition -. &nbsp;退出兜底&nbsp; .-> clear_fallback_state;
+	intent_recognition -. &nbsp;不满意&nbsp; .-> dissatisfied;
+	intent_recognition -. &nbsp;兜底流程&nbsp; .-> fallback;
+	intent_recognition -. &nbsp;评价反馈&nbsp; .-> feedback;
+	intent_recognition -. &nbsp;协商处理&nbsp; .-> negotiate;
+	intent_recognition -. &nbsp;使用指导&nbsp; .-> query_rewrite;
+	intent_recognition -. &nbsp;满意&nbsp; .-> satisfied;
+	knowledge_qa --> mark_as_save_record;
+	load_history --> intent_recognition;
+	mark_as_cond_fallback --> save_history;
+	mark_as_cond_negotiate --> save_history;
+	mark_as_save_record --> save_history;
+	negotiate --> mark_as_cond_negotiate;
+	query_rewrite --> knowledge_qa;
+	satisfied --> mark_as_save_record;
+	save_history -.-> cond_fallback;
+	save_history -. &nbsp;cond_negotiate&nbsp; .-> save_record;
+	clear_fallback_state --> __end__;
+	save_record --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
