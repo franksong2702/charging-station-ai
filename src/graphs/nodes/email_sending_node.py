@@ -230,11 +230,17 @@ def email_sending_node(
     if state.conversation_history:
         # 优先使用截断索引，只展示截断后的对话
         truncate_index = getattr(state, 'conversation_truncate_index', None)
-        if truncate_index is not None and truncate_index < len(state.conversation_history):
-            display_history = state.conversation_history[truncate_index:]
+        if truncate_index is not None and truncate_index <= len(state.conversation_history):
+            # 【修复】确保包含 Round 1（用户发起投诉的内容）
+            # 简单直接的方案：从 max(0, truncate_index - 1) 开始
+            # 这样可以确保包含用户发起投诉的第一条对话
+            start_index = max(0, truncate_index - 1)
+            display_history = state.conversation_history[start_index:]
+            logger.info(f"邮件发送节点 - 截断索引: {truncate_index}, 实际开始索引: {start_index}, 展示对话数: {len(display_history)}")
         else:
             # 没有截断索引时，只展示最近10条对话
             display_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
+            logger.info(f"邮件发送节点 - 无截断索引，展示最近对话数: {len(display_history)}")
         
         conversation_items = []
         for msg in display_history:
