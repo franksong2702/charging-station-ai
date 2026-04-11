@@ -92,6 +92,7 @@
 - COMP-003: 用户信息不完整，AI 没有先追问地点和时间就直接收集手机号
 - **后续发现问题1**: AI 卡在追问详情阶段，无法进入信息收集阶段
 - **后续发现问题2**: 用户说确认后，AI 还是重复请确认以上信息是否准确，无法创建工单
+- **最终找到的根本原因**: summary_collect 阶段的判断条件里包含了 `phase == "confirm"`，所以当 phase 是 "confirm" 时，会先进入 summary_collect 阶段的 if 块，而不是 confirm 阶段的 if 块！
 
 **解决方案**:
 1. **新增 `ask_problem` 阶段**：用于共情追问用户遇到了什么问题
@@ -103,16 +104,18 @@
    - SaveHistoryOutput 中添加 case_confirmed 字段
    - save_history_node.py 中所有返回都包含 case_confirmed 字段
    - fallback_node.py 中 confirm 阶段把 _is_confirm 判断提前到最前面
+   - **【最终关键修复】** 把 `phase == "confirm"` 从 summary_collect 阶段的判断条件里移除！
 
 **修改文件**:
 - `src/graphs/state.py` - SaveHistoryOutput 中添加 case_confirmed 字段
 - `src/graphs/nodes/save_history_node.py` - 所有返回都包含 case_confirmed 字段
-- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，移除 clarify 阶段，简化流程，确认阶段把 _is_confirm 判断提前
+- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，移除 clarify 阶段，简化流程，确认阶段把 _is_confirm 判断提前，把 `phase == "confirm"` 从 summary_collect 阶段的判断条件里移除
 
 **测试结果**:
 | 测试场景 | 用户输入 | AI 回复 | 测试结果 |
 |---------|---------|---------|---------|
 | 用户情绪激动 | "什么破系统，充不上电" | 先安抚强烈情绪，记录问题，然后直接进入信息收集阶段 | ✅ 完美通过！ |
+| 用户说"确认" | "确认" | ✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。 | ✅ 完美通过！ |
 
 ### 2026-04-11: 多轮对话状态保持问题修复
 **问题描述**:

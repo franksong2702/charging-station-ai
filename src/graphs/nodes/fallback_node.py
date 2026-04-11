@@ -378,7 +378,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
 
     
     # ==================== 总结与收集阶段（收集手机号和车牌号） ====================
-    if phase == "summary_collect" or phase == "collect_info" or phase == "confirm":
+    if phase == "summary_collect" or phase == "collect_info":
         # 提取用户消息中的信息（包括时间、地点）
         extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
         extracted_phone = extracted.get("phone", "")
