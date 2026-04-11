@@ -292,6 +292,7 @@ class CreateCaseOutput(BaseModel):
     case_created: bool = Field(default=True, description="工单是否创建成功")
     case_id: str = Field(default="", description="工单 ID")
     reply_content: str = Field(default="", description="保留的回复内容")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话历史（传递给邮件发送节点）")
 
 
 # ==================== 清除兜底状态节点 ====================

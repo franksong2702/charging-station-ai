@@ -58,7 +58,8 @@ def create_case_node(
         return CreateCaseOutput(
             case_created=True,
             case_id=case_id,
-            reply_content=state.reply_content  # 保留回复内容
+            reply_content=state.reply_content,  # 保留回复内容
+            conversation_history=state.conversation_history if state.conversation_history else []  # 传递对话历史给邮件发送节点
         )
         
     except Exception as e:
@@ -68,7 +69,8 @@ def create_case_node(
         return CreateCaseOutput(
             case_created=False,
             case_id="",
-            reply_content=state.reply_content  # 即使失败也保留回复内容
+            reply_content=state.reply_content,  # 即使失败也保留回复内容
+            conversation_history=state.conversation_history if state.conversation_history else []  # 传递对话历史给邮件发送节点
         )
     finally:
         if session:
