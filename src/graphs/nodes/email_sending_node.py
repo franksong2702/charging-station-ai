@@ -222,7 +222,17 @@ def email_sending_node(
     problem_summary = state.problem_summary or state.user_info.get("description", "")
     case_id = state.case_id or "无"
     
+    logger.info("=" * 100)
+    logger.info("email_sending_node - 调试信息")
+    logger.info("=" * 100)
     logger.info(f"邮件发送节点 - 手机: {phone}, 车牌: {license_plate}, 工单: {case_id}")
+    logger.info(f"邮件发送节点 - state.conversation_history 长度: {len(state.conversation_history) if state.conversation_history else 0}")
+    if state.conversation_history:
+        for i, msg in enumerate(state.conversation_history):
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            logger.info(f"邮件发送节点 -   [{i+1}] {role}: {content[:60]}...")
+    logger.info("=" * 100)
     
     # 构建对话记录 HTML（只展示最近20条，避免历史记录过长）
     conversation_html = ""
