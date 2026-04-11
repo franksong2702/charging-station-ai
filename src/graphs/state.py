@@ -154,6 +154,7 @@ class EmailSendingInput(BaseModel):
     conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话记录（用户+AI）")
     # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
     conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
+    reply_content: str = Field(default="", description="要保留的回复内容")
 
 
 class EmailSendingOutput(BaseModel):
@@ -274,12 +275,14 @@ class CreateCaseInput(BaseModel):
     license_plate: str = Field(default="", description="用户车牌号")
     problem_summary: str = Field(..., description="问题总结")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="完整对话上下文")
+    reply_content: str = Field(default="", description="要保留的回复内容")
 
 
 class CreateCaseOutput(BaseModel):
     """创建工单节点的输出"""
     case_created: bool = Field(default=True, description="工单是否创建成功")
     case_id: str = Field(default="", description="工单 ID")
+    reply_content: str = Field(default="", description="保留的回复内容")
 
 
 # ==================== 清除兜底状态节点 ====================

@@ -86,6 +86,35 @@
 
 ## 关键修复记录（2026-04-04 新增）
 
+### 2026-04-05: 兜底流程三大问题修复
+**问题描述**:
+1. 槽位状态不一致：明明已显示车牌号，但总结却说"尚未提供车牌号"
+2. 退出意图检测后返回空响应
+3. 确认同义词"行"返回空响应
+
+**解决方案**:
+1. **槽位状态不一致修复**：
+   - 完全不使用 Summary Agent 生成的问题总结
+   - 改用 `entry_problem` 或 `problem_summary` 作为基础
+   - 只进行简单的"用户"到"您"的替换
+   - 避免 LLM 输出不稳定导致的状态矛盾
+
+2. **退出意图空响应修复**：
+   - 在 `clear_fallback_state_node.py` 中添加退出意图检测逻辑
+   - 当用户说"算了"、"不用了"等关键词时，返回友好回复
+   - 在 `state.py` 的 `ClearFallbackStateOutput` 中已有 `reply_content` 字段
+
+3. **确认回复保留修复**：
+   - 修改 `CreateCaseInput` 和 `CreateCaseOutput` 添加 `reply_content` 字段
+   - 修改 `EmailSendingInput` 添加 `reply_content` 字段
+   - 确保后续节点能够保留和传递回复内容
+
+**修改文件**:
+- `src/graphs/nodes/fallback_node.py` - 彻底修复槽位状态问题，移除 Summary Agent 依赖
+- `src/graphs/state.py` - CreateCaseInput/Output、EmailSendingInput 添加 reply_content 字段
+- `src/graphs/nodes/create_case_node.py` - 保留和传递 reply_content
+- `src/graphs/nodes/clear_fallback_state_node.py` - 已有退出意图检测逻辑（无需修改）
+
 ### 2026-04-04: 兜底流程状态过期机制 + 时区问题修复
 **问题描述**:
 1. 兜底流程状态没有过期机制，用户永久卡在兜底流程
