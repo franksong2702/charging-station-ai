@@ -224,43 +224,13 @@ def email_sending_node(
     
     logger.info(f"邮件发送节点 - 手机: {phone}, 车牌: {license_plate}, 工单: {case_id}")
     
-    # 构建对话记录 HTML（只展示最近10条，避免历史记录过长）
-    # 如果有截断索引，只展示截断后的对话（这次投诉的对话）
+    # 构建对话记录 HTML（只展示最近20条，避免历史记录过长）
     conversation_html = ""
     if state.conversation_history:
-        # 【调试日志】输出完整的 state 信息
-        logger.info("=" * 100)
-        logger.info("邮件发送节点 - 调试信息")
-        logger.info("=" * 100)
-        
-        # 1. 输出 conversation_truncate_index
-        truncate_index = getattr(state, 'conversation_truncate_index', None)
-        logger.info(f"【调试】conversation_truncate_index = {truncate_index}")
-        
-        # 2. 输出完整的 conversation_history
-        logger.info(f"【调试】state.conversation_history 长度 = {len(state.conversation_history) if state.conversation_history else 0}")
-        if state.conversation_history:
-            for i, msg in enumerate(state.conversation_history):
-                role = msg.get('role', 'unknown')
-                content = msg.get('content', '')
-                logger.info(f"【调试】  [{i+1}] {role}: {content[:80]}...")
-        
-        # 3. 构建 display_history（先按原来的逻辑）
-        display_history = []
-        if state.conversation_history:
-            # 暂时不使用 truncate_index，直接用全部对话用于调试
-            display_history = state.conversation_history[-10:] if len(state.conversation_history) > 10 else state.conversation_history
-        
-        # 4. 输出 display_history
-        logger.info(f"【调试】display_history 长度 = {len(display_history)}")
-        if display_history:
-            for i, msg in enumerate(display_history):
-                role = msg.get('role', 'unknown')
-                content = msg.get('content', '')
-                logger.info(f"【调试】  display[{i+1}] {role}: {content[:80]}...")
-        
-        logger.info("=" * 100)
-        # 【调试日志结束】
+        # 使用完整对话历史，最多保留最近 20 条
+        # 业务说明：邮件需要包含完整的用户对话历史（Round 1 到当前轮次）
+        # Round 4（用户确认）不包含新信息，但为了完整性仍然保留
+        display_history = state.conversation_history[-20:] if len(state.conversation_history) > 20 else state.conversation_history
         
         conversation_items = []
         for msg in display_history:
