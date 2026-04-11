@@ -516,14 +516,42 @@ def fallback_node(
                 # 降级：使用原有逻辑
                 problem_summary = problem_summary or state.problem_summary
             
-            # 信息齐全，让用户确认 - 修复：将 problem_summary 中的"用户"替换为"您"
-            # 因为 problem_summary 是 Summary Agent 生成的，可能包含"用户"，但这是直接对用户说的话
-            problem_summary_for_user = problem_summary.replace("用户", "您") if problem_summary else ""
+            # 信息齐全，让用户确认 - 双重修复：
+            # 1. 将 problem_summary 中的"用户"替换为"您"
+            # 2. 过滤掉任何关于"提供/未提供手机号/车牌号"的描述，避免矛盾
+            problem_summary_clean = problem_summary or ""
+            
+            # 替换"用户"为"您"
+            problem_summary_clean = problem_summary_clean.replace("用户", "您")
+            
+            # 过滤掉关于手机号/车牌号提供状态的描述
+            patterns_to_remove = [
+                r"，?已提供手机号[^\s，。]*",
+                r"，?尚未提供手机号[^\s，。]*",
+                r"，?已提供车牌号[^\s，。]*",
+                r"，?尚未提供车牌号[^\s，。]*",
+                r"，?手机号[^\s，。]*已提供",
+                r"，?车牌号[^\s，。]*已提供",
+                r"，?手机号[^\s，。]*尚未提供",
+                r"，?车牌号[^\s，。]*尚未提供",
+                r"已提供手机号[^\s，。]*，?",
+                r"尚未提供手机号[^\s，。]*，?",
+                r"已提供车牌号[^\s，。]*，?",
+                r"尚未提供车牌号[^\s，。]*，?"
+            ]
+            for pattern in patterns_to_remove:
+                problem_summary_clean = re.sub(pattern, "", problem_summary_clean)
+            
+            # 清理多余的标点符号
+            problem_summary_clean = re.sub(r"，+", "，", problem_summary_clean)
+            problem_summary_clean = re.sub(r"。+", "。", problem_summary_clean)
+            problem_summary_clean = problem_summary_clean.strip("，。")
+            
             reply_content = f"""好的，已记录：
 
 📱 手机号：{phone}
 🚗 车牌号：{license_plate}
-📝 情况：{problem_summary_for_user}
+📝 情况：{problem_summary_clean}
 
 ───────────
 以上信息准确吗？准确的话回复"确认"，有误的话请告诉我～"""
