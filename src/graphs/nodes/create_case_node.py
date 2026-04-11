@@ -28,18 +28,9 @@ def create_case_node(
     """
     ctx = runtime.context
     
-    logger.info("=" * 100)
-    logger.info("create_case_node - 调试信息")
-    logger.info("=" * 100)
     logger.info(f"创建工单 - 手机号: {state.phone}, 车牌号: {state.license_plate}")
     logger.info(f"创建工单 - 问题总结: {state.problem_summary[:50]}...")
     logger.info(f"创建工单 - state.conversation_history 长度: {len(state.conversation_history) if state.conversation_history else 0}")
-    if state.conversation_history:
-        for i, msg in enumerate(state.conversation_history):
-            role = msg.get('role', 'unknown')
-            content = msg.get('content', '')
-            logger.info(f"创建工单 -   [{i+1}] {role}: {content[:60]}...")
-    logger.info("=" * 100)
     
     session = None
     try:

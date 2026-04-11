@@ -24,13 +24,33 @@ def save_history_node(
     desc: 将当前对话和兜底流程状态保存到数据库
     integrations: PostgreSQL
     """
-    # 如果没有 user_id，跳过保存
-    if not state.user_id:
-        return SaveHistoryOutput(saved=True)
+    # 构建最新的 conversation_history（添加当前这一轮）
+    updated_conversation_history = list(state.conversation_history) if state.conversation_history else []
     
-    # 如果消息为空，跳过保存
+    # 如果消息不为空，添加当前这一轮
+    if state.user_message and state.reply_content:
+        updated_conversation_history.append({
+            "role": "user",
+            "content": state.user_message
+        })
+        updated_conversation_history.append({
+            "role": "assistant",
+            "content": state.reply_content
+        })
+    
+    # 如果没有 user_id，跳过保存到数据库，但还是返回最新的 conversation_history
+    if not state.user_id:
+        return SaveHistoryOutput(
+            saved=True,
+            conversation_history=updated_conversation_history
+        )
+    
+    # 如果消息为空，跳过保存到数据库，但还是返回最新的 conversation_history
     if not state.user_message or not state.reply_content:
-        return SaveHistoryOutput(saved=True)
+        return SaveHistoryOutput(
+            saved=True,
+            conversation_history=updated_conversation_history
+        )
     
     session = None
     try:
@@ -67,14 +87,20 @@ def save_history_node(
         session.commit()
         
         logger.info(f"保存对话历史成功 - user_id: {state.user_id}, fallback_phase: {state.fallback_phase}")
-        return SaveHistoryOutput(saved=True)
+        return SaveHistoryOutput(
+            saved=True,
+            conversation_history=updated_conversation_history
+        )
         
     except Exception as e:
         # 保存失败不影响主流程，记录错误
         if session:
             session.rollback()
         logger.error(f"保存对话历史失败 - Exception: {type(e).__name__}: {e}")
-        return SaveHistoryOutput(saved=False)
+        return SaveHistoryOutput(
+            saved=False,
+            conversation_history=updated_conversation_history
+        )
     finally:
         if session:
             session.close()

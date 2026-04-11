@@ -200,6 +200,8 @@ class SaveHistoryInput(BaseModel):
     user_message: str = Field(default="", description="用户发送的消息")
     reply_content: str = Field(default="", description="AI 回复内容")
     intent: str = Field(default="", description="意图类型")
+    # 对话历史
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="当前对话历史")
     # 兜底流程状态
     fallback_phase: str = Field(default="", description="兜底流程阶段")
     phone: str = Field(default="", description="用户手机号")
@@ -214,6 +216,7 @@ class SaveHistoryInput(BaseModel):
 class SaveHistoryOutput(BaseModel):
     """保存对话历史节点的输出"""
     saved: bool = Field(default=True, description="是否保存成功")
+    conversation_history: List[Dict[str, str]] = Field(default=[], description="最新的对话历史（包含刚保存的这一轮）")
 
 
 # ==================== 不满意处理节点 ====================
