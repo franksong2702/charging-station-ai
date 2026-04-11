@@ -93,13 +93,16 @@
 - **后续发现问题1**: AI 卡在追问详情阶段，无法进入信息收集阶段
 - **后续发现问题2**: 用户说确认后，AI 还是重复请确认以上信息是否准确，无法创建工单
 - **最终找到的根本原因**: summary_collect 阶段的判断条件里包含了 `phase == "confirm"`，所以当 phase 是 "confirm" 时，会先进入 summary_collect 阶段的 if 块，而不是 confirm 阶段的 if 块！
+- **紧急修复问题**: 移除 clarify 阶段后，FALL-002 R3 和 COMP-003 R3 测试失败，AI 仍回复"请问还能告诉我更多细节吗？"
 
 **解决方案**:
 1. **新增 `ask_problem` 阶段**：用于共情追问用户遇到了什么问题
-2. **简化流程**：移除 `clarify` 阶段，用户提供问题后直接进入 `summary_collect` 阶段
+2. **恢复 `clarify` 阶段**：用于收集详情（地点、时间等）
 3. **保持 `summary_collect` 阶段**：用于收集手机号/车牌号
-4. **最终修改后的流程**：`ask_problem` → `summary_collect` → `confirm` → `done`
-5. **修复卡住问题**：简化判断条件，确保用户提供问题后能顺利进入信息收集阶段
+4. **最终修改后的流程**：`ask_problem` → `clarify` → `summary_collect` → `confirm` → `done`
+5. **修复卡住问题**：
+   - ask_problem 阶段：用户提供问题后直接进入 clarify 阶段
+   - clarify 阶段：收集到时间/地点或问题足够长后进入 summary_collect 阶段
 6. **修复确认环节问题**：
    - SaveHistoryOutput 中添加 case_confirmed 字段
    - save_history_node.py 中所有返回都包含 case_confirmed 字段
@@ -109,13 +112,15 @@
 **修改文件**:
 - `src/graphs/state.py` - SaveHistoryOutput 中添加 case_confirmed 字段
 - `src/graphs/nodes/save_history_node.py` - 所有返回都包含 case_confirmed 字段
-- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，移除 clarify 阶段，简化流程，确认阶段把 _is_confirm 判断提前，把 `phase == "confirm"` 从 summary_collect 阶段的判断条件里移除
+- `src/graphs/nodes/fallback_node.py` - 新增 ask_problem 阶段，恢复 clarify 阶段，确认阶段把 _is_confirm 判断提前，把 `phase == "confirm"` 从 summary_collect 阶段的判断条件里移除
 
 **测试结果**:
 | 测试场景 | 用户输入 | AI 回复 | 测试结果 |
 |---------|---------|---------|---------|
 | 用户情绪激动 | "什么破系统，充不上电" | 先安抚强烈情绪，记录问题，然后直接进入信息收集阶段 | ✅ 完美通过！ |
 | 用户说"确认" | "确认" | ✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。 | ✅ 完美通过！ |
+| FALL-002 R3 用户提供详情 | "徐汇滨江充电站，充了 20 分钟没充进去，扣了我 50 块！" | 先安抚，记录问题，问更多细节 | ✅ 通过！ |
+| COMP-003 R3 用户提供时间 | "昨天下午" | 安抚，记录问题，然后收集手机号和车牌号 | ✅ 通过！ |
 
 ### 2026-04-11: 多轮对话状态保持问题修复
 **问题描述**:

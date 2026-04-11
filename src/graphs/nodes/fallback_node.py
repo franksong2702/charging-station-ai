@@ -326,21 +326,20 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
         # 1. 先安抚情绪
         apology_msg = _get_apology_message(user_message)
         
-        # 2. 直接使用用户消息作为问题描述，简化流程
-        # 判断用户是否已提供问题描述（只要不是只说手机或车牌）
-        has_problem = True
+        # 2. 判断用户是否已提供问题描述
+        has_problem = len(user_message) >= 2 and "手机" not in user_message and "车牌" not in user_message
         
         if has_problem:
-            # 用户已提供问题，直接进入 summary_collect 阶段收集手机号和车牌号
+            # 用户已提供问题，进入 clarify 阶段收集详情（地点、时间等）
             entry_problem = user_message
-            phase = "summary_collect"
+            phase = "clarify"
             # 简单设置 problem_summary
             problem_summary = entry_problem.replace("用户", "您")
             # 回复用户
             reply_content = f"""{apology_msg}
 我已经记录了您的问题：
 {problem_summary}
-为了进一步核实，麻烦您提供一下手机号和车牌号。"""
+请问还能告诉我更多细节吗？比如具体发生在什么时间、什么地点？"""
             return FallbackOutput(
                 reply_content=reply_content,
                 fallback_phase=phase,
@@ -375,8 +374,111 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                 conversation_truncate_index=conversation_truncate_index
             )
     
+    # ==================== 澄清安抚阶段（收集详情：地点、时间等） ====================
+    if phase == "clarify":
+        # 1. 先提取用户可能提供的手机号、车牌号、问题信息、时间、地点
+        extracted = _extract_info_by_llm(ctx, user_message, check_complaint=False)
+        extracted_phone = extracted.get("phone", "")
+        extracted_plate = extracted.get("license_plate", "")
+        extracted_problem = extracted.get("problem", "")
+        extracted_time = extracted.get("time", "")
+        extracted_location = extracted.get("location", "")
+        
+        # 2. 更新手机号和车牌号
+        if extracted_phone:
+            phone = extracted_phone
+        if extracted_plate:
+            license_plate = extracted_plate
+        
+        # 3. 更新问题描述（如果用户提供了新的问题或详情）
+        updated = []
+        if extracted_problem and not problem_summary:
+            # 没有旧的问题总结，用新提取的
+            entry_problem = extracted_problem
+            problem_summary = entry_problem.replace("用户", "您")
+            updated.append(f"情况 {problem_summary}")
+        elif extracted_problem and problem_summary:
+            # 有旧的问题总结，补充新的信息
+            if extracted_time or extracted_location:
+                new_details = []
+                if extracted_time:
+                    new_details.append(f"时间：{extracted_time}")
+                if extracted_location:
+                    new_details.append(f"地点：{extracted_location}")
+                if new_details:
+                    problem_summary = f"{problem_summary}，{'，'.join(new_details)}"
+                    updated.append(f"情况 {problem_summary}")
+        
+        # 4. 判断是否应该进入 summary_collect 阶段
+        # 只要用户提供了问题，或者提供了时间/地点，就进入 summary_collect 阶段
+        has_enough_details = bool(problem_summary) or bool(extracted_time) or bool(extracted_location) or len(user_message) > 10
+        
+        if has_enough_details:
+            # 进入 summary_collect 阶段收集手机号/车牌号
+            phase = "summary_collect"
+            # 检查是否信息完整
+            missing = []
+            if not phone:
+                missing.append("手机号")
+            if not license_plate:
+                missing.append("车牌号")
+            
+            if not missing:
+                # 信息完整，直接确认
+                reply_content = f"""好的，我先整理一下信息：
+手机号：{phone}
+车牌号：{license_plate}
+情况：{problem_summary}
+请确认以上信息是否准确，准确的话回复"确认"。"""
+                return FallbackOutput(
+                    reply_content=reply_content,
+                    fallback_phase="confirm",
+                    phone=phone,
+                    license_plate=license_plate,
+                    problem_summary=problem_summary,
+                    user_supplement="",
+                    entry_problem=entry_problem,
+                    case_confirmed=False,
+                    conversation_truncate_index=conversation_truncate_index
+                )
+            else:
+                # 信息不完整，继续收集（【修复 FALL-002】使用情绪检测）
+                apology_msg = _get_apology_message(user_message)
+                reply_content = f"""{apology_msg}
+我已经记录了您的问题：
+{problem_summary}
+为了进一步核实，麻烦您提供一下{"和".join(missing)}。"""
+                return FallbackOutput(
+                    reply_content=reply_content,
+                    fallback_phase=phase,
+                    phone=phone,
+                    license_plate=license_plate,
+                    problem_summary=problem_summary,
+                    user_supplement="",
+                    entry_problem=entry_problem,
+                    case_confirmed=False,
+                    conversation_truncate_index=conversation_truncate_index
+                )
+        
+        # 还没有足够信息，继续追问
+        apology_msg = _get_apology_message(user_message)
+        reply_content = f"""{apology_msg}
+我已经记录了您的问题：
+{problem_summary if problem_summary else "正在记录中..."}
+请问还能告诉我更多细节吗？比如具体发生在什么时间、什么地点？"""
+        
+        return FallbackOutput(
+            reply_content=reply_content,
+            fallback_phase="clarify",
+            phone=phone,
+            license_plate=license_plate,
+            problem_summary=problem_summary,
+            user_supplement="",
+            entry_problem=entry_problem,
+            case_confirmed=False,
+            conversation_truncate_index=conversation_truncate_index
+        )
 
-    
     # ==================== 总结与收集阶段（收集手机号和车牌号） ====================
     if phase == "summary_collect" or phase == "collect_info":
         # 提取用户消息中的信息（包括时间、地点）
