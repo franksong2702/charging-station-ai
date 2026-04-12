@@ -1,10 +1,10 @@
 """
-协商处理节点 - 简化版，先安抚情绪，再追问详情，最后给方案
+协商处理节点 - 完全使用 LLM 提示词处理，不使用硬编码逻辑
 
 核心原则：
-1. 先检测情绪，情绪激动先安抚
-2. 追问详情：什么问题、在哪里、什么时候、多少钱
-3. 给方案，问用户是否接受
+1. 完全由提示词处理对话轮数判断
+2. 第一轮：安抚 + 追问
+3. 第二轮及以后：确认理解 + 给方案
 4. 用户拒绝或超过 5 轮 → 升级到兜底
 """
 import os
@@ -47,8 +47,8 @@ def negotiate_node(
     runtime: Runtime[Context]
 ) -> NegotiateOutput:
     """
-    title: 协商处理 - 安抚情绪，追问详情，给方案
-    desc: 先安抚情绪激动用户，再追问详情，根据常识给方案，用户拒绝时升级到兜底
+    title: 协商处理 - 完全由提示词处理轮数逻辑
+    desc: 先安抚情绪激动用户，再根据对话历史判断轮数，第一轮追问，后续轮次给方案
     integrations: 大语言模型
     """
     ctx = runtime.context
@@ -57,7 +57,7 @@ def negotiate_node(
     
     logger.info(f"协商处理 - 用户消息：{user_message}")
     
-    # 获取当前轮数并 +1
+    # 获取当前轮数（用于最大轮数限制，不用于提示词逻辑）
     current_round = getattr(state, 'negotiate_round_count', 0) + 1
     
     # 检查是否超过最大轮数（5 轮）
@@ -94,60 +94,50 @@ def negotiate_node(
             negotiate_round_count=current_round
         )
     
-    # 检测情绪
-    is_angry = _detect_anger(user_message)
-    
-    # 第一轮：先安抚，再追问
-    if current_round == 1:
-        if is_angry:
-            # 情绪激动：先安抚
-            reply_content = "非常抱歉给您带来了这么糟糕的体验！我能理解您现在很生气。您能跟我说说具体发生了什么吗？"
-        else:
-            # 普通问题：简单询问
-            reply_content = "非常抱歉给您带来了不便！请问您遇到了什么问题？"
-        
-        return NegotiateOutput(
-            reply_content=reply_content,
-            negotiate_phase="asking",
-            problem_understanding="",
-            route_to_fallback=False,
-            negotiate_round_count=current_round
-        )
-    
-    # 后续轮次：追问详情，给方案
-    # 构建上下文（最近 3 轮对话）
+    # 构建对话历史上下文
     recent_history = ""
     if conversation_history:
-        for i, msg in enumerate(conversation_history[-6:], 1):  # 最近 3 轮（用户+AI 是 2 条）
+        for i, msg in enumerate(conversation_history[-8:], 1):  # 最近 4 轮（用户+AI 是 2 条）
             role = "用户" if i % 2 == 1 else "AI"
             recent_history += f"{role}: {msg.get('content', '')}\n"
     
-    # 调用 LLM 生成追问和方案
+    # 检测情绪
+    is_angry = _detect_anger(user_message)
+    
+    # 调用 LLM 生成回复 - 完全由提示词处理轮数逻辑
     prompt = f"""你是一个专业的充电桩客服助手，擅长处理用户的退款、扣费、优惠券等问题。
 
-【任务】
-用户有退款/扣费/优惠券等问题，你需要：
-1. 复述用户的问题（让用户感觉被理解）
-2. 追问详细情况（如还需要了解什么）
-3. 根据常识给初步解决方案
-4. 问用户是否接受这个方案
+【核心规则】
+通过对话历史的长度判断当前是第几轮：
+- 如果对话历史为空或只有很少（不超过2条），说明是第一轮
+- 如果对话历史超过2条，说明是第二轮及以后
+
+【第一轮任务】
+用户第一次找你，你需要：
+1. 如果用户情绪激动，先真诚安抚
+2. 再友好地追问用户具体遇到了什么问题
+
+【第二轮及以后任务】
+用户已经提供了一些信息，你需要：
+1. 复述并确认你理解的用户问题（让用户感觉被理解）
+2. 根据充电桩客服常识给出初步解决方案
+3. 问用户是否接受这个方案
 
 【对话历史】
-{recent_history if recent_history else "无历史对话"}
+{recent_history if recent_history else "（无历史对话，这是第一轮）"}
 
 【当前用户消息】
 {user_message}
+
+【用户情绪检测】
+{'用户情绪激动，请先真诚安抚！' if is_angry else '用户情绪正常'}
 
 【输出格式】
 请返回 JSON 格式：
 {{
     "understanding": "你理解的用户问题（详细，包含原因）",
-    "question": "追问的问题（如'请问您使用的哪个平台的优惠券？'）",
-    "solution": "初步解决方案（如'建议先在 App 里查看优惠券使用记录'）",
-    "ask_accept": "是否询问接受（如'您看这样可以吗？'）"
+    "reply": "完整的回复内容（包含安抚/理解/方案/是否接受等所有内容）"
 }}
-
-如果信息已经完整，可以不追问，直接给方案。
 
 【重要】
 - 不要提到"截图"、"凭证"、"照片"等系统不支持的内容
@@ -160,7 +150,7 @@ def negotiate_node(
             messages=[HumanMessage(content=prompt)],
             model="doubao-seed-1-8-251228",
             temperature=0.3,
-            max_completion_tokens=300
+            max_completion_tokens=400
         )
         
         # 解析 LLM 返回
@@ -172,31 +162,10 @@ def negotiate_node(
         result = json.loads(content)
         
         understanding = result.get("understanding", "")
-        question = result.get("question", "")
-        solution = result.get("solution", "")
-        ask_accept = result.get("ask_accept", "")
+        reply_content = result.get("reply", "")
         
-        # 生成回复
-        reply_parts = []
-        
-        # 1. 复述理解（让用户感觉被理解）- 修复：将"用户"替换为"您"
-        if understanding:
-            understanding_for_user = understanding.replace("用户", "您")
-            reply_parts.append(f"明白了，{understanding_for_user}。")
-        
-        # 2. 追问问题
-        if question:
-            reply_parts.append(question)
-        
-        # 3. 给方案
-        if solution:
-            reply_parts.append(f"建议：{solution}")
-        
-        # 4. 问是否接受
-        if ask_accept:
-            reply_parts.append(ask_accept)
-        
-        reply_content = "\n".join(reply_parts) if reply_parts else "好的，请问您具体遇到了什么情况？能详细说说吗？"
+        if not reply_content:
+            reply_content = "好的，请问您具体遇到了什么情况？能详细说说吗？"
         
         logger.info(f"协商处理 - 回复：{reply_content}")
         
