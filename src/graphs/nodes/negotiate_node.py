@@ -68,7 +68,8 @@ def negotiate_node(
             reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
             negotiate_phase="escalating",
             problem_understanding="",
-            route_to_fallback=True
+            route_to_fallback=True,
+            negotiate_round_count=current_round
         )
     
     # 检查用户是否要求找人工客服
@@ -78,7 +79,8 @@ def negotiate_node(
             reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
             negotiate_phase="escalating",
             problem_understanding="",
-            route_to_fallback=True
+            route_to_fallback=True,
+            negotiate_round_count=current_round
         )
     
     # 检查用户是否明确拒绝方案
@@ -88,7 +90,8 @@ def negotiate_node(
             reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
             negotiate_phase="escalating",
             problem_understanding="",
-            route_to_fallback=True
+            route_to_fallback=True,
+            negotiate_round_count=current_round
         )
     
     # 检测情绪
@@ -107,7 +110,8 @@ def negotiate_node(
             reply_content=reply_content,
             negotiate_phase="asking",
             problem_understanding="",
-            route_to_fallback=False
+            route_to_fallback=False,
+            negotiate_round_count=current_round
         )
     
     # 后续轮次：追问详情，给方案
@@ -200,7 +204,8 @@ def negotiate_node(
             reply_content=reply_content,
             negotiate_phase="asking",
             problem_understanding=understanding,
-            route_to_fallback=False
+            route_to_fallback=False,
+            negotiate_round_count=current_round
         )
         
     except Exception as e:
@@ -209,5 +214,6 @@ def negotiate_node(
             reply_content="好的，请问您具体遇到了什么情况？能详细说说吗？",
             negotiate_phase="asking",
             problem_understanding="",
-            route_to_fallback=False
+            route_to_fallback=False,
+            negotiate_round_count=current_round
         )

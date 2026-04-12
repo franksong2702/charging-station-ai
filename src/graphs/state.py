@@ -177,6 +177,11 @@ class LoadHistoryInput(BaseModel):
     entry_problem: str = Field(default="", description="用户问题描述（来自 GraphInput）")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引（来自 GraphInput）")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结（来自 GraphInput）")
+    # 协商处理状态（来自 GraphInput）
+    negotiate_phase: str = Field(default="", description="协商处理阶段（来自 GraphInput）")
+    problem_understanding: str = Field(default="", description="对用户问题的理解（来自 GraphInput）")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数（来自 GraphInput）")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（来自 GraphInput）")
 
 
 class LoadHistoryOutput(BaseModel):
@@ -190,6 +195,11 @@ class LoadHistoryOutput(BaseModel):
     entry_problem: str = Field(default="", description="用户问题描述")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+    # 协商处理状态
+    negotiate_phase: str = Field(default="", description="协商处理阶段")
+    problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 # ==================== 保存对话历史节点 ====================
@@ -211,6 +221,11 @@ class SaveHistoryInput(BaseModel):
     user_supplement: str = Field(default="", description="用户补充内容")
     conversation_truncate_index: Optional[int] = Field(default=0, description="对话截断索引")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+    # 协商处理状态
+    negotiate_phase: str = Field(default="", description="协商处理阶段")
+    problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 class SaveHistoryOutput(BaseModel):
@@ -218,6 +233,11 @@ class SaveHistoryOutput(BaseModel):
     saved: bool = Field(default=True, description="是否保存成功")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="最新的对话历史（包含刚保存的这一轮）")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
+    # 协商处理状态
+    negotiate_phase: str = Field(default="", description="协商处理阶段")
+    problem_understanding: str = Field(default="", description="对用户问题的理解")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 # ==================== 不满意处理节点 ====================
@@ -348,6 +368,7 @@ class NegotiateOutput(BaseModel):
     problem_understanding: str = Field(default="", description="对用户问题的理解")
     route_after_save: str = Field(default="save_record", description="save_history 之后的路由：save_record/cond_fallback")
     route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（协商失败时）")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
 
 
 # ==================== Summary Agent 节点 ====================

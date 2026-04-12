@@ -42,7 +42,12 @@ def load_history_node(
             problem_summary=state.problem_summary,
             entry_problem=state.entry_problem,
             conversation_truncate_index=state.conversation_truncate_index,
-            case_confirmed=False
+            case_confirmed=False,
+            # 协商处理状态
+            negotiate_phase=state.negotiate_phase,
+            problem_understanding=state.problem_understanding,
+            negotiate_round_count=state.negotiate_round_count,
+            route_to_fallback=state.route_to_fallback
         )
     
     session = None
@@ -69,7 +74,12 @@ def load_history_node(
                 problem_summary=state.problem_summary,
                 entry_problem=state.entry_problem,
                 conversation_truncate_index=state.conversation_truncate_index,
-                case_confirmed=state.case_confirmed
+                case_confirmed=state.case_confirmed,
+                # 协商处理状态
+                negotiate_phase=state.negotiate_phase,
+                problem_understanding=state.problem_understanding,
+                negotiate_round_count=state.negotiate_round_count,
+                route_to_fallback=state.route_to_fallback
             )
         
         # 转换为对话历史格式，并按时间正序排列
@@ -84,6 +94,11 @@ def load_history_node(
         entry_problem = ""
         conversation_truncate_index = 0
         case_confirmed = False
+        # 协商处理相关字段
+        negotiate_phase = ""
+        problem_understanding = ""
+        negotiate_round_count = 0
+        route_to_fallback = False
         
         if latest_record:
             fallback_phase = str(latest_record.fallback_phase or "")
@@ -93,6 +108,11 @@ def load_history_node(
             entry_problem = str(latest_record.entry_problem or "")
             conversation_truncate_index = int(latest_record.conversation_truncate_index or 0)
             case_confirmed = bool(latest_record.case_confirmed or False)
+            # 协商处理相关字段
+            negotiate_phase = str(latest_record.negotiate_phase or "")
+            problem_understanding = str(latest_record.problem_understanding or "")
+            negotiate_round_count = int(latest_record.negotiate_round_count or 0)
+            route_to_fallback = bool(latest_record.route_to_fallback or False)
             
             # 【新增：检查兜底流程状态是否过期
             if fallback_phase and latest_record.created_at:
@@ -134,6 +154,15 @@ def load_history_node(
         # 如果 GraphInput 中传入了 case_confirmed，优先使用
         if state.case_confirmed:
             case_confirmed = state.case_confirmed
+        # 如果 GraphInput 中传入了协商处理状态，优先使用
+        if state.negotiate_phase:
+            negotiate_phase = state.negotiate_phase
+        if state.problem_understanding:
+            problem_understanding = state.problem_understanding
+        if state.negotiate_round_count:
+            negotiate_round_count = state.negotiate_round_count
+        if state.route_to_fallback:
+            route_to_fallback = state.route_to_fallback
         
         # 构建对话历史（按时间正序）
         for record in reversed(records):
@@ -158,7 +187,12 @@ def load_history_node(
             problem_summary=problem_summary,
             entry_problem=entry_problem,
             conversation_truncate_index=conversation_truncate_index,
-            case_confirmed=case_confirmed
+            case_confirmed=case_confirmed,
+            # 协商处理状态
+            negotiate_phase=negotiate_phase,
+            problem_understanding=problem_understanding,
+            negotiate_round_count=negotiate_round_count,
+            route_to_fallback=route_to_fallback
         )
         
     except Exception as e:
@@ -172,7 +206,12 @@ def load_history_node(
             problem_summary=state.problem_summary,
             entry_problem=state.entry_problem,
             conversation_truncate_index=state.conversation_truncate_index,
-            case_confirmed=state.case_confirmed
+            case_confirmed=state.case_confirmed,
+            # 协商处理状态
+            negotiate_phase=state.negotiate_phase,
+            problem_understanding=state.problem_understanding,
+            negotiate_round_count=state.negotiate_round_count,
+            route_to_fallback=state.route_to_fallback
         )
     finally:
         if session:

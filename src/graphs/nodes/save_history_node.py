@@ -43,7 +43,11 @@ def save_history_node(
         return SaveHistoryOutput(
             saved=True,
             conversation_history=updated_conversation_history,
-            case_confirmed=state.case_confirmed if state.case_confirmed else False
+            case_confirmed=state.case_confirmed if state.case_confirmed else False,
+            negotiate_phase=state.negotiate_phase if state.negotiate_phase else "",
+            problem_understanding=state.problem_understanding if state.problem_understanding else "",
+            negotiate_round_count=state.negotiate_round_count if state.negotiate_round_count else 0,
+            route_to_fallback=state.route_to_fallback if state.route_to_fallback else False
         )
     
     # 如果消息为空，跳过保存到数据库，但还是返回最新的 conversation_history
@@ -51,7 +55,11 @@ def save_history_node(
         return SaveHistoryOutput(
             saved=True,
             conversation_history=updated_conversation_history,
-            case_confirmed=state.case_confirmed if state.case_confirmed else False
+            case_confirmed=state.case_confirmed if state.case_confirmed else False,
+            negotiate_phase=state.negotiate_phase if state.negotiate_phase else "",
+            problem_understanding=state.problem_understanding if state.problem_understanding else "",
+            negotiate_round_count=state.negotiate_round_count if state.negotiate_round_count else 0,
+            route_to_fallback=state.route_to_fallback if state.route_to_fallback else False
         )
     
     session = None
@@ -72,7 +80,12 @@ def save_history_node(
             entry_problem=state.entry_problem if state.entry_problem else None,
             user_supplement=state.user_supplement if state.user_supplement else None,
             conversation_truncate_index=state.conversation_truncate_index if state.conversation_truncate_index else None,
-            case_confirmed=state.case_confirmed if state.case_confirmed else False
+            case_confirmed=state.case_confirmed if state.case_confirmed else False,
+            # 协商处理相关字段
+            negotiate_phase=state.negotiate_phase if state.negotiate_phase else None,
+            problem_understanding=state.problem_understanding if state.problem_understanding else None,
+            negotiate_round_count=state.negotiate_round_count if state.negotiate_round_count else 0,
+            route_to_fallback=state.route_to_fallback if state.route_to_fallback else False
         )
         
         # 如果 fallback_phase = "done"，表示兜底已完成，但我们不清空状态
@@ -92,7 +105,11 @@ def save_history_node(
         return SaveHistoryOutput(
             saved=True,
             conversation_history=updated_conversation_history,
-            case_confirmed=state.case_confirmed if state.case_confirmed else False
+            case_confirmed=state.case_confirmed if state.case_confirmed else False,
+            negotiate_phase=state.negotiate_phase if state.negotiate_phase else "",
+            problem_understanding=state.problem_understanding if state.problem_understanding else "",
+            negotiate_round_count=state.negotiate_round_count if state.negotiate_round_count else 0,
+            route_to_fallback=state.route_to_fallback if state.route_to_fallback else False
         )
         
     except Exception as e:
@@ -103,7 +120,11 @@ def save_history_node(
         return SaveHistoryOutput(
             saved=False,
             conversation_history=updated_conversation_history,
-            case_confirmed=state.case_confirmed if state.case_confirmed else False
+            case_confirmed=state.case_confirmed if state.case_confirmed else False,
+            negotiate_phase=state.negotiate_phase if state.negotiate_phase else "",
+            problem_understanding=state.problem_understanding if state.problem_understanding else "",
+            negotiate_round_count=state.negotiate_round_count if state.negotiate_round_count else 0,
+            route_to_fallback=state.route_to_fallback if state.route_to_fallback else False
         )
     finally:
         if session:

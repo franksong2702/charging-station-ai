@@ -29,6 +29,11 @@ class ConversationHistory(Base):
     user_supplement: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="用户补充信息")
     conversation_truncate_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0, comment="对话截断索引")
     case_confirmed: Mapped[bool] = mapped_column(default=False, comment="用户是否已确认问题总结")
+    # 协商处理相关字段
+    negotiate_phase: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="协商处理阶段")
+    problem_understanding: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="对用户问题的理解")
+    negotiate_round_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="协商轮数计数")
+    route_to_fallback: Mapped[bool] = mapped_column(default=False, comment="是否需要路由到兜底流程")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     
     __table_args__ = (
