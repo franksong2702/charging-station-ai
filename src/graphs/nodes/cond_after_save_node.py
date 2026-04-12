@@ -15,6 +15,7 @@ class AfterSaveRouteCheck(BaseModel):
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
     # 协商处理相关
     user_message: str = Field(default="", description="用户消息（用于协商处理路由判断）")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（协商失败时）")
 
 
 class AfterSaveRouteOutput(BaseModel):
@@ -27,6 +28,10 @@ def cond_after_save_route_path(state: AfterSaveRouteCheck) -> str:
     用于 add_conditional_edges 的路径函数（返回字符串）
     save_history 之后的统一路由判断
     """
+    # 优先检查 route_to_fallback（协商失败时升级到兜底）
+    if getattr(state, 'route_to_fallback', False):
+        return "cond_fallback"
+    
     route_marker = state.route_after_save
     
     if route_marker == "save_record":

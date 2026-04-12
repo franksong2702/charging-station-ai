@@ -1,5 +1,5 @@
 """
-意图路由条件节点 - 根据意图识别结果决定后续处理流程
+意图路由条件节点 - 根据意图识别结果决定后续处理流程（简化为两层分流）
 """
 from typing import Any
 from langchain_core.runnables import RunnableConfig
@@ -21,7 +21,7 @@ def cond_intent_recognition(
 ) -> CondIntentRecognitionOutput:
     """
     title: 意图路由
-    desc: 根据意图识别结果，决定后续处理流程
+    desc: 根据意图识别结果，决定后续处理流程（简化为两层分流）
     integrations: 
     """
     intent = state.intent
@@ -33,14 +33,6 @@ def cond_intent_recognition(
         route = "故障处理"
     elif intent == "negotiate":
         route = "协商处理"
-    elif intent == "complaint":
-        route = "兜底流程"
-    elif intent == "fallback":
-        route = "兜底流程"
-    elif intent == "cancel_fallback":
-        route = "退出兜底"
-    elif intent == "exit_fallback":
-        route = "退出兜底"
     elif intent == "dissatisfied":
         route = "不满意"
     elif intent == "satisfied":
@@ -50,7 +42,8 @@ def cond_intent_recognition(
     elif intent == "feedback_bad":
         route = "评价反馈"
     else:
-        route = "使用指导"
+        # 默认都协商处理
+        route = "协商处理"
     
     return CondIntentRecognitionOutput(route=route)
 
@@ -58,6 +51,7 @@ def cond_intent_recognition(
 def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
     """
     用于 add_conditional_edges 的路径函数（返回字符串）
+    简化为两层分流
     """
     intent = state.intent
     
@@ -67,14 +61,6 @@ def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
         return "故障处理"
     elif intent == "negotiate":
         return "协商处理"
-    elif intent == "complaint":
-        return "兜底流程"
-    elif intent == "fallback":
-        return "兜底流程"
-    elif intent == "cancel_fallback":
-        return "退出兜底"
-    elif intent == "exit_fallback":
-        return "退出兜底"
     elif intent == "dissatisfied":
         return "不满意"
     elif intent == "satisfied":
@@ -84,4 +70,5 @@ def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
     elif intent == "feedback_bad":
         return "评价反馈"
     else:
-        return "使用指导"
+        # 默认都协商处理
+        return "协商处理"

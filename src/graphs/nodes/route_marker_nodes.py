@@ -25,6 +25,7 @@ class RouteMarkerInput(BaseModel):
     negotiate_phase: str = Field(default="", description="协商处理阶段")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
     negotiate_round_count: int = Field(default=0, description="协商轮数计数")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（协商失败时）")
 
 
 class RouteMarkerOutput(BaseModel):
@@ -44,6 +45,7 @@ class RouteMarkerOutput(BaseModel):
     negotiate_phase: str = Field(default="", description="协商处理阶段")
     problem_understanding: str = Field(default="", description="对用户问题的理解")
     negotiate_round_count: int = Field(default=0, description="协商轮数计数")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（协商失败时）")
 
 
 def mark_as_save_record(
@@ -69,7 +71,8 @@ def mark_as_save_record(
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
         problem_understanding=state.problem_understanding,
-        negotiate_round_count=state.negotiate_round_count
+        negotiate_round_count=state.negotiate_round_count,
+        route_to_fallback=state.route_to_fallback
     )
 
 
@@ -96,7 +99,8 @@ def mark_as_cond_fallback(
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
         problem_understanding=state.problem_understanding,
-        negotiate_round_count=state.negotiate_round_count
+        negotiate_round_count=state.negotiate_round_count,
+        route_to_fallback=state.route_to_fallback
     )
 
 
@@ -110,8 +114,8 @@ def mark_as_cond_negotiate(
     desc: 设置 route_after_save 为 cond_negotiate（协商处理分支用），检查是否升级到兜底
     integrations: 
     """
-    # 检查协商阶段是否为 escalating（升级到兜底）
-    if state.negotiate_phase == "escalating":
+    # 检查是否需要升级到兜底（route_to_fallback=true 或 negotiate_phase == "escalating"）
+    if getattr(state, 'route_to_fallback', False) or state.negotiate_phase == "escalating":
         return RouteMarkerOutput(
             route_after_save="cond_fallback",  # 升级到兜底
             reply_content=state.reply_content,
@@ -125,7 +129,8 @@ def mark_as_cond_negotiate(
             conversation_truncate_index=state.conversation_truncate_index,
             negotiate_phase=state.negotiate_phase,
             problem_understanding=state.problem_understanding,
-            negotiate_round_count=state.negotiate_round_count
+            negotiate_round_count=state.negotiate_round_count,
+            route_to_fallback=state.route_to_fallback
         )
     
     # 正常协商处理，轮数 +1
@@ -142,5 +147,6 @@ def mark_as_cond_negotiate(
         conversation_truncate_index=state.conversation_truncate_index,
         negotiate_phase=state.negotiate_phase,
         problem_understanding=state.problem_understanding,
-        negotiate_round_count=state.negotiate_round_count + 1  # 轮数 +1
+        negotiate_round_count=state.negotiate_round_count + 1,  # 轮数 +1
+        route_to_fallback=state.route_to_fallback
     )

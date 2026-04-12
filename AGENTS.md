@@ -86,6 +86,36 @@
 
 ## 关键修复记录（2026-04-04 新增）
 
+### 2026-04-13: 架构简化 - 两层分流（知识库回答、协商处理），兜底作为升级路径
+**需求背景**:
+- 原有意图识别过于复杂，有 8 种分支
+- 协商处理和兜底流程职责不清晰
+- 用户希望简化：先协商处理，失败后再升级到兜底
+
+**解决方案**:
+1. **简化意图识别**：
+   - 移除投诉兜底意图，只保留知识库回答和协商处理
+   - `config/intent_recognition_llm_cfg.json`：只保留两个意图类型
+   - `cond_intent_recognition_node.py`：简化为 2 个分支
+
+2. **增强协商处理**：
+   - `state.py`：在 NegotiateOutput 中添加 route_to_fallback 字段
+   - `negotiate_node.py`：增加情绪安抚、追问详情、移除截图请求、简化语言、添加 route_to_fallback 逻辑
+   - 用户拒绝方案或超过 5 轮时设置 route_to_fallback=true
+
+3. **调整路由逻辑**：
+   - `route_marker_nodes.py`：根据 route_to_fallback 决定路由
+   - `cond_after_save_node.py`：优先检查 route_to_fallback 字段
+   - `graph.py`：确保协商失败时能进入 cond_fallback 分支
+
+**修改文件**:
+- `config/intent_recognition_llm_cfg.json` - 简化为两个意图类型
+- `src/graphs/nodes/cond_intent_recognition_node.py` - 简化为 2 个分支
+- `src/graphs/state.py` - NegotiateOutput 中添加 route_to_fallback 字段
+- `src/graphs/nodes/negotiate_node.py` - 增强协商处理，添加 route_to_fallback 逻辑
+- `src/graphs/nodes/route_marker_nodes.py` - 根据 route_to_fallback 决定路由
+- `src/graphs/nodes/cond_after_save_node.py` - 优先检查 route_to_fallback 字段
+
 ### 2026-04-12: 兜底流程"先共情追问，再收集信息"优化及确认环节修复
 **问题描述**:
 - FALL-002: 用户情绪激动，AI 没有先安抚情绪就直接问手机号/车牌号
