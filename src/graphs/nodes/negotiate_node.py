@@ -94,6 +94,40 @@ def negotiate_node(
             negotiate_round_count=current_round
         )
     
+    # 检查用户是否在配合提供信息（但不符合协商对话格式）
+    # 包含以下特征时，说明用户在提供信息但需要升级到兜底：
+    # 1. 包含手机号/车牌号特征
+    # 2. 包含"没有订单号"、"小程序"、"APP"等说明性内容
+    # 3. 不包含任何接受/拒绝关键词
+    def _is_cooperating_message(msg: str) -> bool:
+        # 检查是否包含手机号/车牌号特征
+        has_phone = bool(re.search(r'1[3-9]\d{9}', msg))  # 手机号
+        has_plate = bool(re.search(r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z][A-Z0-9]{4,5}[A-Z0-9挂学警港澳]?', msg))  # 车牌号
+        
+        # 检查是否包含说明性内容
+        has_info_keywords = any(keyword in msg for keyword in [
+            "没有订单号", "小程序", "APP", "应用", "软件", 
+            "充了", "扣了", "支付", "付款", "订单", "交易"
+        ])
+        
+        # 检查是否不包含接受/拒绝关键词
+        has_accept_reject = any(keyword in msg for keyword in [
+            "接受", "同意", "好的", "可以", "行", "不接受", "不行", "拒绝"
+        ])
+        
+        # 如果有手机号/车牌号 或 有说明性内容，且没有接受/拒绝关键词，说明在配合提供信息
+        return (has_phone or has_plate or has_info_keywords) and not has_accept_reject
+    
+    if _is_cooperating_message(user_message):
+        logger.info("用户配合提供信息但不符合协商格式，进入兜底流程")
+        return NegotiateOutput(
+            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
+            negotiate_phase="escalating",
+            problem_understanding="",
+            route_to_fallback=True,
+            negotiate_round_count=current_round
+        )
+    
     # 构建对话历史上下文
     recent_history = ""
     if conversation_history:
