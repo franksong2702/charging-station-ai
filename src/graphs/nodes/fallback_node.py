@@ -305,6 +305,71 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     logger.info(f"兜底流程 - 当前阶段: {phase}, 手机号: {phone}, 车牌号: {license_plate}")
     
+    # ==================== 【新增】全局确认词检查（任何阶段都能识别） ====================
+    # 先检查用户是否在确认（不管在什么阶段）
+    if _is_confirm(user_message):
+        logger.info(f"兜底流程 - 全局确认词识别，当前阶段: {phase}")
+        
+        # 检查信息是否完整
+        has_phone = bool(phone)
+        has_license = bool(license_plate)
+        has_problem = bool(problem_summary)
+        
+        # 如果信息完整，直接创建工单
+        if has_phone and has_license and has_problem:
+            logger.info(f"兜底流程 - 信息完整，直接创建工单")
+            reply_content = "✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。\n手机号：" + phone + "\n车牌号：" + license_plate + "\n情况：" + problem_summary
+            return FallbackOutput(
+                reply_content=reply_content,
+                fallback_phase="done",
+                phone=phone,
+                license_plate=license_plate,
+                problem_summary=problem_summary,
+                user_supplement="",
+                entry_problem=entry_problem,
+                case_confirmed=True,
+                conversation_truncate_index=conversation_truncate_index
+            )
+        
+        # 如果信息不完整，先整理信息让用户确认
+        logger.info(f"兜底流程 - 信息不完整，整理信息让用户确认")
+        phase = "confirm"
+        
+        # 构建信息展示
+        info_parts = []
+        if phone:
+            info_parts.append("手机号：" + phone)
+        if license_plate:
+            info_parts.append("车牌号：" + license_plate)
+        if problem_summary:
+            info_parts.append("情况：" + problem_summary)
+        
+        # 询问缺失信息
+        missing = []
+        if not phone:
+            missing.append("手机号")
+        if not license_plate:
+            missing.append("车牌号")
+        if not problem_summary:
+            missing.append("问题描述")
+        
+        if info_parts:
+            reply_content = "好的，我先整理一下已有的信息：\n" + "\n".join(info_parts) + "\n麻烦再提供一下您的" + "和".join(missing) + "好吗？"
+        else:
+            reply_content = "麻烦您提供一下您的" + "和".join(missing) + "好吗？"
+        
+        return FallbackOutput(
+            reply_content=reply_content,
+            fallback_phase=phase,
+            phone=phone,
+            license_plate=license_plate,
+            problem_summary=problem_summary,
+            user_supplement="",
+            entry_problem=entry_problem,
+            case_confirmed=False,
+            conversation_truncate_index=conversation_truncate_index
+        )
+    
     # ==================== 取消/退出兜底流程 ====================
     if _is_cancel(user_message):
         logger.info("兜底流程 - 用户取消")
