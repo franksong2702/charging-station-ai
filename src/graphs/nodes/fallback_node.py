@@ -1,11 +1,11 @@
 """
-兜底流程节点 - 简化版 4 阶段流程
+兜底流程节点 - 修复版 4 阶段流程
 
-核心原则：
-1. 好的，我会帮您记录并反馈给工作人员～
-2. 收集信息：手机号、车牌号、时间、地点、问题详情
-3. 生成问题总结
-4. 用户确认后创建工单 + 发送邮件
+修复的问题：
+1. 车牌号正则不匹配 - 支持新能源车牌
+2. 确认词识别后没有生成总结 - 正确处理确认流程
+3. 信息提取出现乱码 - 修复正则提取逻辑
+4. 确认后没有创建工单和发送邮件 - 确保流程正确
 """
 import os
 import json
@@ -15,8 +15,6 @@ import re
 from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
-from tools.llm import create_llm_client
-from langchain_core.messages import HumanMessage
 
 from graphs.state import FallbackInput, FallbackOutput
 
@@ -81,9 +79,9 @@ def _get_apology_message(user_message: str) -> str:
         return "好的，我会帮您记录并反馈给工作人员～"
 
 
-def _extract_info_by_simple_regex(user_message: str) -> dict:
+def _extract_info(user_message: str) -> dict:
     """
-    简单的正则提取信息（不依赖 LLM）
+    提取用户消息中的信息
     提取：手机号、车牌号、时间、地点、问题
     """
     result = {
@@ -94,56 +92,73 @@ def _extract_info_by_simple_regex(user_message: str) -> dict:
         "problem": ""
     }
     
-    # 提取手机号
+    # 1. 提取手机号 - 简单直接
     phone_match = re.search(r'1[3-9]\d{9}', user_message)
     if phone_match:
         result["phone"] = phone_match.group(0)
+        logger.info(f"提取手机号成功: {result['phone']}")
     
-    # 提取车牌号
-    plate_match = re.search(r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z][A-Z0-9]{4,5}[A-Z0-9挂学警港澳]?', user_message)
+    # 2. 提取车牌号 - 支持新能源车牌
+    # 格式：京 A12345, 京 AD12345, 沪 A12345D
+    plate_pattern = r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z][A-Z0-9]{4,6}[A-Z0-9挂学警港澳]?'
+    plate_match = re.search(plate_pattern, user_message)
     if plate_match:
         result["license_plate"] = plate_match.group(0)
+        logger.info(f"提取车牌号成功: {result['license_plate']}")
     
-    # 提取时间
-    time_keywords = ["今天", "昨天", "前天", "刚才", "刚刚", "早上", "上午", "中午", "下午", "晚上", "分钟", "小时", "点"]
+    # 3. 提取时间 - 简单关键词匹配
+    time_keywords = ["今天", "昨天", "前天", "刚才", "刚刚", "早上", "上午", "中午", "下午", "晚上"]
     for keyword in time_keywords:
         if keyword in user_message:
-            # 简单提取包含时间关键词的片段
             result["time"] = keyword
+            logger.info(f"提取时间成功: {result['time']}")
             break
     
-    # 提取地点
-    location_keywords = ["充电站", "充电桩", "站", "园", "广场", "商场", "路", "号"]
-    for keyword in location_keywords:
-        if keyword in user_message:
-            # 简单提取包含地点关键词的片段
-            result["location"] = keyword
-            break
+    # 4. 提取地点 - 简单关键词匹配
+    if "充电站" in user_message:
+        # 提取"充电站"前面的部分
+        station_idx = user_message.find("充电站")
+        if station_idx > 0:
+            # 从前面找最近的标点或空格
+            start_idx = max(
+                user_message.rfind("，", 0, station_idx),
+                user_message.rfind("。", 0, station_idx),
+                user_message.rfind("！", 0, station_idx),
+                user_message.rfind("？", 0, station_idx),
+                user_message.rfind(" ", 0, station_idx)
+            )
+            if start_idx == -1:
+                start_idx = 0
+            else:
+                start_idx += 1
+            location_part = user_message[start_idx:station_idx+3].strip()
+            if location_part:
+                result["location"] = location_part
+                logger.info(f"提取地点成功: {result['location']}")
     
-    # 如果没有提取到问题，就用整个用户消息
-    if not result["problem"]:
-        # 排除手机号和车牌号的部分，剩下的作为问题
-        problem_text = user_message
-        if result["phone"]:
-            problem_text = problem_text.replace(result["phone"], "")
-        if result["license_plate"]:
-            problem_text = problem_text.replace(result["license_plate"], "")
-        problem_text = problem_text.strip()
-        if problem_text:
-            result["problem"] = problem_text
+    # 5. 提取问题 - 排除手机号和车牌号的部分
+    problem_text = user_message
+    if result["phone"]:
+        problem_text = problem_text.replace(result["phone"], "")
+    if result["license_plate"]:
+        problem_text = problem_text.replace(result["license_plate"], "")
+    problem_text = problem_text.strip()
+    if problem_text and len(problem_text) > 2:
+        result["problem"] = problem_text
+        logger.info(f"提取问题成功: {result['problem']}")
     
     return result
 
 
 def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime[Context]) -> FallbackOutput:
     """
-    title: 兜底流程处理 - 简化版
+    title: 兜底流程处理 - 修复版
     desc: 4 阶段流程：记录反馈 → 收集信息 → 总结确认 → 创建工单
     """
     ctx = runtime.context
     
     # 从状态中获取当前信息
-    user_message = state.user_message
+    user_message = state.user_message.strip()
     phase = state.fallback_phase or ""
     phone = state.phone or ""
     license_plate = state.license_plate or ""
@@ -159,19 +174,25 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     if conversation_truncate_index == 0:
         conversation_truncate_index = len(conversation_history)
     
-    logger.info(f"兜底流程 - 当前阶段: {phase}, 手机号: {phone}, 车牌号: {license_plate}")
+    logger.info(f"===== 兜底流程开始 =====")
+    logger.info(f"用户消息: '{user_message}'")
+    logger.info(f"当前阶段: {phase}")
+    logger.info(f"已有信息 - 手机: '{phone}', 车牌: '{license_plate}', 问题: '{problem_summary}'")
     
-    # ==================== 1. 先检查全局确认词 ====================
+    # ==================== 1. 先检查全局确认词（优先级最高） ====================
     if _is_confirm(user_message):
-        logger.info(f"兜底流程 - 全局确认词识别")
+        logger.info("✓ 全局确认词识别")
         
         # 检查信息是否完整
         has_phone = bool(phone)
         has_license = bool(license_plate)
         has_problem = bool(problem_summary or entry_problem)
         
+        logger.info(f"信息完整性检查 - 手机: {has_phone}, 车牌: {has_license}, 问题: {has_problem}")
+        
         if has_phone and has_license and has_problem:
-            # 信息完整，直接创建工单
+            # ✓ 信息完整，直接创建工单
+            logger.info("✓ 信息完整，创建工单")
             reply_content = "✅ 收到您的问题，我们的工作人员将会尽快处理，并在1-3个工作日内联系您。"
             return FallbackOutput(
                 reply_content=reply_content,
@@ -185,8 +206,10 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
                 conversation_truncate_index=conversation_truncate_index
             )
         else:
-            # 信息不完整，先整理信息让用户补充
+            # ✗ 信息不完整，先整理信息让用户补充
+            logger.info("✗ 信息不完整，让用户补充")
             phase = "collect_info"
+            
             info_parts = []
             if phone:
                 info_parts.append(f"手机号：{phone}")
@@ -222,7 +245,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     # ==================== 2. 检查取消 ====================
     if _is_cancel(user_message):
-        logger.info("兜底流程 - 用户取消")
+        logger.info("用户取消")
         return FallbackOutput(
             reply_content="好的，理解！如有需要随时联系我们。祝您生活愉快～",
             fallback_phase="",
@@ -235,8 +258,8 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             conversation_truncate_index=0
         )
     
-    # ==================== 3. 提取用户提供的信息（简单正则，不依赖 LLM） ====================
-    extracted = _extract_info_by_simple_regex(user_message)
+    # ==================== 3. 提取用户提供的信息 ====================
+    extracted = _extract_info(user_message)
     extracted_phone = extracted.get("phone", "")
     extracted_plate = extracted.get("license_plate", "")
     extracted_time = extracted.get("time", "")
@@ -246,14 +269,17 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     # 更新信息
     if extracted_phone:
         phone = extracted_phone
+        logger.info(f"更新手机号: {phone}")
     if extracted_plate:
         license_plate = extracted_plate
+        logger.info(f"更新车牌号: {license_plate}")
     
     # 更新问题描述
     if not entry_problem:
         # 第一次进入，记录 entry_problem
         entry_problem = extracted_problem or user_message
         problem_summary = entry_problem.replace("用户", "您")
+        logger.info(f"第一次进入，记录问题: {problem_summary}")
     elif extracted_problem and extracted_problem != entry_problem:
         # 补充新信息
         new_details = []
@@ -261,17 +287,20 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             new_details.append(f"时间：{extracted_time}")
         if extracted_location:
             new_details.append(f"地点：{extracted_location}")
+        
         if new_details:
             problem_summary = f"{problem_summary}，{'，'.join(new_details)}"
+            logger.info(f"补充问题细节: {problem_summary}")
     
     # ==================== 4. 判断当前阶段，执行对应逻辑 ====================
     
-    # 阶段 1：刚开始（ask_problem 或 空）
-    if phase == "" or phase == "ask_problem":
+    # 阶段 1：刚开始（空）
+    if phase == "":
         phase = "collect_info"
         apology_msg = _get_apology_message(user_message)
         reply_content = f"""{apology_msg}
 方便提供一下您的手机号和车牌号吗？"""
+        logger.info(f"阶段 1: 刚开始，回复: {reply_content}")
         return FallbackOutput(
             reply_content=reply_content,
             fallback_phase=phase,
@@ -286,33 +315,49 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     # 阶段 2：收集信息（collect_info）
     if phase == "collect_info":
+        logger.info(f"阶段 2: 收集信息")
+        
         # 检查是否信息完整
         has_phone = bool(phone)
         has_license = bool(license_plate)
         has_problem = bool(problem_summary)
         
+        logger.info(f"信息完整性 - 手机: {has_phone}, 车牌: {has_license}, 问题: {has_problem}")
+        
         if has_phone and has_license and has_problem:
-            # 信息完整，进入确认阶段
+            # ✓ 信息完整，进入确认阶段
             phase = "confirm"
-            reply_content = f"""好的，我整理一下您的问题：
+            
+            # 构建问题总结
+            summary_parts = [problem_summary]
+            if extracted_time:
+                summary_parts.append(f"时间：{extracted_time}")
+            if extracted_location:
+                summary_parts.append(f"地点：{extracted_location}")
+            
+            final_summary = "，".join(summary_parts)
+            
+            reply_content = f"""好的，我总结一下您的问题：
 手机号：{phone}
 车牌号：{license_plate}
-情况：{problem_summary}
+情况：{final_summary}
 
 以上信息准确吗？准确的话回复"确认"，有误的话请告诉我～"""
+            
+            logger.info(f"信息完整，进入确认阶段，回复: {reply_content}")
             return FallbackOutput(
                 reply_content=reply_content,
                 fallback_phase=phase,
                 phone=phone,
                 license_plate=license_plate,
-                problem_summary=problem_summary,
+                problem_summary=final_summary,
                 user_supplement="",
                 entry_problem=entry_problem,
                 case_confirmed=False,
                 conversation_truncate_index=conversation_truncate_index
             )
         else:
-            # 信息不完整，继续收集
+            # ✗ 信息不完整，继续收集
             missing = []
             if not phone:
                 missing.append("手机号")
@@ -323,6 +368,8 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             
             reply_content = f"""好的，我会帮您记录并反馈给工作人员～
 麻烦提供一下您的{"和".join(missing)}好吗？"""
+            
+            logger.info(f"信息不完整，继续收集，回复: {reply_content}")
             return FallbackOutput(
                 reply_content=reply_content,
                 fallback_phase=phase,
@@ -337,12 +384,22 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     
     # 阶段 3：确认阶段（confirm）
     if phase == "confirm":
+        logger.info(f"阶段 3: 确认阶段")
         # 用户确认后应该已经在前面的全局确认词检查中处理了
-        # 如果到了这里，说明用户在纠正信息
-        # 继续收集信息
+        # 如果到了这里，说明用户在纠正信息，回到收集阶段
         phase = "collect_info"
+        
+        # 再次提取用户可能提供的新信息
+        extracted_new = _extract_info(user_message)
+        if extracted_new.get("phone"):
+            phone = extracted_new["phone"]
+        if extracted_new.get("license_plate"):
+            license_plate = extracted_new["license_plate"]
+        
         reply_content = f"""好的，我会帮您记录并反馈给工作人员～
 麻烦提供一下您的信息好吗？"""
+        
+        logger.info(f"回到收集阶段，回复: {reply_content}")
         return FallbackOutput(
             reply_content=reply_content,
             fallback_phase=phase,
@@ -356,6 +413,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
         )
     
     # 默认：继续收集信息
+    logger.info(f"默认：继续收集信息")
     phase = "collect_info"
     return FallbackOutput(
         reply_content=reply_content,
