@@ -1,0 +1,7 @@
+{
+  "model": "doubao-seed-1-8-251228",
+  "temperature": 0.8,
+  "max_tokens": 2000,
+  "top_p": 0.9,
+  "timeout": 60
+}
