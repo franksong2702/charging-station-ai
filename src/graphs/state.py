@@ -54,6 +54,11 @@ class GraphInput(BaseModel):
     problem_summary: str = Field(default="", description="已生成的问题总结（可选）")
     user_supplement: str = Field(default="", description="用户补充内容（可选）")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述（可选）")
+    # 协商处理状态（用于多轮对话）
+    negotiate_phase: str = Field(default="", description="协商处理阶段（可选）")
+    problem_understanding: str = Field(default="", description="对用户问题的理解（可选）")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数（可选）")
+    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（可选）")
 
 
 class GraphOutput(BaseModel):
@@ -359,6 +364,7 @@ class NegotiateInput(BaseModel):
     """协商处理节点的输入"""
     user_message: str = Field(..., description="用户发送的消息")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
+    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
 
 
 class NegotiateOutput(BaseModel):
