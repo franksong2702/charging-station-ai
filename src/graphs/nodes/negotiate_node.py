@@ -6,6 +6,7 @@
 2. 第一轮：安抚 + 追问
 3. 第二轮及以后：确认理解 + 给方案
 4. 用户拒绝或超过 5 轮 → 升级到兜底
+5. 用户提供手机号/车牌号/确认词 → 立即升级到兜底
 """
 import os
 import json
@@ -72,7 +73,66 @@ def negotiate_node(
             negotiate_round_count=current_round
         )
     
-    # 检查用户是否要求找人工客服
+    # ============================================
+    # 辅助判断函数（必须定义在使用之前）
+    # ============================================
+    
+    # 检查用户是否在说确认词（这些应该在 fallback 中处理）
+    def _is_confirm_word(msg: str) -> bool:
+        confirm_keywords = ["确认", "确认无误", "没问题", "是的", "对", "好的", "对呀", "是", "行", "嗯嗯"]
+        msg_clean = re.sub(r'[，。！？、\.\,\!\?\~\s]', '', msg.lower())
+        return any(keyword in msg_clean for keyword in confirm_keywords)
+    
+    # 检查用户是否在提供手机号/车牌号
+    def _has_phone_or_plate(msg: str) -> bool:
+        has_phone = bool(re.search(r'1[3-9]\d{9}', msg))  # 手机号
+        has_plate = bool(re.search(r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z][A-Z0-9]{4,5}[A-Z0-9挂学警港澳]?', msg))  # 车牌号
+        return has_phone or has_plate
+    
+    # 检查用户是否明确拒绝方案
+    def _is_reject_message(msg: str) -> bool:
+        reject_keywords = ["不接受", "不行", "拒绝", "不同意", "不可以"]
+        msg_clean = re.sub(r'[，。！？、\.\,\!\?\~\s]', '', msg.lower())
+        return any(keyword in msg_clean for keyword in reject_keywords)
+    
+    # ============================================
+    # 核心判断逻辑 - 优先升级到 fallback 的情况
+    # ============================================
+    
+    # 1. 如果用户说确认词 → 直接升级到 fallback（这些应该在 fallback 中处理）
+    if _is_confirm_word(user_message):
+        logger.info("用户说确认词，直接升级到兜底流程")
+        return NegotiateOutput(
+            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
+            negotiate_phase="escalating",
+            problem_understanding="",
+            route_to_fallback=True,
+            negotiate_round_count=current_round
+        )
+    
+    # 2. 如果用户提供手机号/车牌号 → 直接升级到 fallback
+    if _has_phone_or_plate(user_message):
+        logger.info("用户提供手机号/车牌号，直接升级到兜底流程")
+        return NegotiateOutput(
+            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
+            negotiate_phase="escalating",
+            problem_understanding="",
+            route_to_fallback=True,
+            negotiate_round_count=current_round
+        )
+    
+    # 3. 如果用户明确拒绝 → 升级到 fallback
+    if _is_reject_message(user_message):
+        logger.info("用户明确拒绝方案，进入兜底流程")
+        return NegotiateOutput(
+            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
+            negotiate_phase="escalating",
+            problem_understanding="",
+            route_to_fallback=True,
+            negotiate_round_count=current_round
+        )
+    
+    # 4. 检查用户是否要求找人工客服
     if "人工" in user_message or "客服" in user_message and "找" in user_message:
         logger.info("用户要求找人工客服，进入兜底流程")
         return NegotiateOutput(
@@ -83,50 +143,9 @@ def negotiate_node(
             negotiate_round_count=current_round
         )
     
-    # 检查用户是否明确拒绝方案
-    if "不接受" in user_message or "不行" in user_message or "拒绝" in user_message:
-        logger.info("用户明确拒绝方案，进入兜底流程")
-        return NegotiateOutput(
-            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
-            negotiate_phase="escalating",
-            problem_understanding="",
-            route_to_fallback=True,
-            negotiate_round_count=current_round
-        )
-    
-    # 检查用户是否在配合提供信息（但不符合协商对话格式）
-    # 包含以下特征时，说明用户在提供信息但需要升级到兜底：
-    # 1. 包含手机号/车牌号特征
-    # 2. 包含"没有订单号"、"小程序"、"APP"等说明性内容
-    # 3. 不包含任何接受/拒绝关键词
-    def _is_cooperating_message(msg: str) -> bool:
-        # 检查是否包含手机号/车牌号特征
-        has_phone = bool(re.search(r'1[3-9]\d{9}', msg))  # 手机号
-        has_plate = bool(re.search(r'[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z][A-Z0-9]{4,5}[A-Z0-9挂学警港澳]?', msg))  # 车牌号
-        
-        # 检查是否包含说明性内容
-        has_info_keywords = any(keyword in msg for keyword in [
-            "没有订单号", "小程序", "APP", "应用", "软件", 
-            "充了", "扣了", "支付", "付款", "订单", "交易"
-        ])
-        
-        # 检查是否不包含接受/拒绝关键词
-        has_accept_reject = any(keyword in msg for keyword in [
-            "接受", "同意", "好的", "可以", "行", "不接受", "不行", "拒绝"
-        ])
-        
-        # 如果有手机号/车牌号 或 有说明性内容，且没有接受/拒绝关键词，说明在配合提供信息
-        return (has_phone or has_plate or has_info_keywords) and not has_accept_reject
-    
-    if _is_cooperating_message(user_message):
-        logger.info("用户配合提供信息但不符合协商格式，进入兜底流程")
-        return NegotiateOutput(
-            reply_content="好的，我理解您的需求了。为了进一步处理您的问题，请您提供手机号和车牌号，我帮您创建工单。",
-            negotiate_phase="escalating",
-            problem_understanding="",
-            route_to_fallback=True,
-            negotiate_round_count=current_round
-        )
+    # ============================================
+    # 其他情况 - 继续走正常的协商处理流程
+    # ============================================
     
     # 构建对话历史上下文
     recent_history = ""
