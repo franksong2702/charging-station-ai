@@ -1,7 +1,7 @@
 """
-充电桩智能客服工作流主图编排
+充电桩智能客服工作流主图编排 - 简化版
 支持评价机制，支持多轮对话，支持兜底流程和工单创建
-支持分层客服架构（协商处理层）
+架构简化：只保留知识库问答和兜底流程两种路径
 
 核心原则：所有和用户的对话，不管是什么情况，都先保存对话历史！
 路由方案：用 route_after_save 字段标记，save_history 之后统一路由
@@ -27,8 +27,6 @@ from graphs.state import (
     ClearFallbackStateInput,
     IntentRouteCheck,
     CaseConfirmedCheck,
-    NegotiateInput,
-    NegotiateRouteCheck,
     AfterSaveRouteCheck
 )
 
@@ -47,13 +45,10 @@ from graphs.nodes.create_case_node import create_case_node
 from graphs.nodes.clear_fallback_state_node import clear_fallback_state_node
 from graphs.nodes.cond_intent_recognition_node import cond_intent_recognition, cond_intent_recognition_path
 from graphs.nodes.cond_fallback_node import cond_fallback, cond_fallback_path
-from graphs.nodes.negotiate_node import negotiate_node
-from graphs.nodes.cond_negotiate_node import cond_negotiate, cond_negotiate_route_path
 from graphs.nodes.cond_after_save_node import cond_after_save, cond_after_save_route_path
 from graphs.nodes.route_marker_nodes import (
     mark_as_save_record,
-    mark_as_cond_fallback,
-    mark_as_cond_negotiate
+    mark_as_cond_fallback
 )
 
 
@@ -88,8 +83,6 @@ builder.add_node(
     cond_fallback,
     metadata={"type": "condition"}
 )
-
-# 协商处理条件节点已删除，简化路由
 
 # save_history 之后的统一条件路由节点
 builder.add_node(
@@ -178,16 +171,6 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
-# 协商处理
-builder.add_node(
-    "negotiate",
-    negotiate_node,
-    metadata={
-        "type": "agent",
-        "llm_cfg": "config/negotiate_llm_cfg.json"
-    }
-)
-
 # 创建工单
 builder.add_node(
     "create_case",
@@ -215,17 +198,11 @@ builder.add_node(
     metadata={"type": "task"}
 )
 
-builder.add_node(
-    "mark_as_cond_negotiate",
-    mark_as_cond_negotiate,
-    metadata={"type": "task"}
-)
-
 # ==================== 设置入口点 ====================
 
 builder.set_entry_point("load_history")
 
-# ==================== 添加边（新的路由方案：用 route_after_save 标记） ====================
+# ==================== 添加边（简化架构：只保留知识库问答和兜底流程） ====================
 
 # 加载历史 → 意图识别
 builder.add_edge("load_history", "intent_recognition")
@@ -237,7 +214,6 @@ builder.add_conditional_edges(
     path_map={
         "使用指导": "query_rewrite",
         "故障处理": "query_rewrite",
-        "协商处理": "negotiate",
         "兜底流程": "fallback",
         "不满意": "dissatisfied",
         "满意": "satisfied",
@@ -261,18 +237,13 @@ builder.add_edge("mark_as_save_record", "save_history")
 builder.add_edge("fallback", "mark_as_cond_fallback")
 builder.add_edge("mark_as_cond_fallback", "save_history")
 
-# ==================== 分支 4：协商处理 → 处理 → 标记 → 保存历史 ====================
-builder.add_edge("negotiate", "mark_as_cond_negotiate")
-builder.add_edge("mark_as_cond_negotiate", "save_history")
-
 # ==================== 核心：save_history 之后的统一条件路由 ====================
 builder.add_conditional_edges(
     source="save_history",
     path=cond_after_save_route_path,
     path_map={
         "save_record": "save_record",
-        "cond_fallback": "cond_fallback",
-        "cond_negotiate": "save_record"  # 协商处理后统一走 save_record
+        "cond_fallback": "cond_fallback"
     }
 )
 
@@ -293,9 +264,6 @@ builder.add_conditional_edges(
 builder.add_edge("create_case", "email_sending")
 builder.add_edge("email_sending", "clear_fallback_state")
 builder.add_edge("clear_fallback_state", END)
-
-# ==================== cond_negotiate 分支已删除，简化路由 ====================
-# 协商处理后直接保存历史，后续根据用户下一条消息判断
 
 # 退出兜底 → 直接结束
 builder.add_edge("clear_fallback_state", END)

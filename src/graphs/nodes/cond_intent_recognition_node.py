@@ -31,8 +31,8 @@ def cond_intent_recognition(
         route = "使用指导"
     elif intent == "fault_handling":
         route = "故障处理"
-    elif intent == "negotiate":
-        route = "协商处理"
+    elif intent == "fallback":
+        route = "兜底流程"
     elif intent == "dissatisfied":
         route = "不满意"
     elif intent == "satisfied":
@@ -41,9 +41,11 @@ def cond_intent_recognition(
         route = "评价反馈"
     elif intent == "feedback_bad":
         route = "评价反馈"
+    elif intent == "exit_fallback":
+        route = "退出兜底"
     else:
-        # 默认都协商处理
-        route = "协商处理"
+        # 默认都兜底流程
+        route = "兜底流程"
     
     return CondIntentRecognitionOutput(route=route)
 
@@ -59,8 +61,8 @@ def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
         return "使用指导"
     elif intent == "fault_handling":
         return "故障处理"
-    elif intent == "negotiate":
-        return "协商处理"
+    elif intent == "fallback":
+        return "兜底流程"
     elif intent == "dissatisfied":
         return "不满意"
     elif intent == "satisfied":
@@ -69,6 +71,8 @@ def cond_intent_recognition_path(state: IntentRouteCheck) -> str:
         return "评价反馈"
     elif intent == "feedback_bad":
         return "评价反馈"
+    elif intent == "exit_fallback":
+        return "退出兜底"
     else:
-        # 默认都协商处理
-        return "协商处理"
+        # 默认都兜底流程
+        return "兜底流程"

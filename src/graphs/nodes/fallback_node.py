@@ -421,9 +421,9 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             phase = "ask_problem"
             if "退款" in user_message or "退钱" in user_message:
                 reply_content = f"""{apology_msg}
-请问您是想了解退款规则，还是有具体的订单需要退款呢？
+好的，我会帮您记录并反馈给工作人员～
 
-如果是想了解规则，我可以直接告诉您；如果是有具体订单需要处理，我来帮您登记反馈～"""
+方便提供一下您的手机号和车牌号吗？"""
             else:
                 reply_content = f"""{apology_msg}
 请问您遇到了什么问题？我先帮您看看～"""

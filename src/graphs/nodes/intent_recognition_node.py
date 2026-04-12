@@ -1,11 +1,6 @@
 """
 意图识别节点 - 使用 LLM 智能判断用户意图
-支持：使用指导、故障处理、投诉兜底、轻度不满、满意、评价反馈
-
-优化点：
-1. 移除关键词匹配，改用 LLM 判断退出意图
-2. 增强 LLM 提示词，让模型理解语义
-3. 兜底流程中，只有明确退出意图才返回 exit_fallback
+简化为两种意图：知识库问答、兜底流程
 """
 import os
 import re
@@ -142,14 +137,14 @@ def intent_recognition_node(
         intent = "usage_guidance"
     elif "故障处理" in intent_text:
         intent = "fault_handling"
-    elif "协商处理" in intent_text:
-        intent = "negotiate"
+    elif "知识库问答" in intent_text:
+        intent = "usage_guidance"  # 知识库问答统一使用 usage_guidance
     elif "退出兜底" in intent_text or "取消兜底" in intent_text:
         # 优先判断退出兜底
         intent = "exit_fallback"
     elif "继续兜底" in intent_text or "补充信息" in intent_text:
         intent = "fallback"
-    elif "投诉兜底" in intent_text or "投诉" in intent_text:
+    elif "兜底流程" in intent_text or "投诉" in intent_text or "退款" in intent_text:
         intent = "fallback"
     elif "兜底" in intent_text or "强烈不满" in intent_text:
         intent = "fallback"

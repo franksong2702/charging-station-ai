@@ -49,7 +49,7 @@ def get_recipient_config() -> Dict[str, Any]:
         Dict[str, Any]: 包含 recipient_emails 和 recipient_name 的字典
     """
     # 从环境变量读取，或者使用默认值
-    recipient_email = os.getenv("EMAIL_RECIPIENT", "xuefu.song@qq.com")
+    recipient_email = os.getenv("EMAIL_RECIPIENT", "snowwhite7654321@163.com")
     recipient_name = os.getenv("EMAIL_RECIPIENT_NAME", "充电桩客服团队")
     
     # 支持多个邮箱用逗号分隔
@@ -211,7 +211,7 @@ def email_sending_node(
     
     # 获取收件邮箱配置
     recipient_config = get_recipient_config()
-    recipient_emails = recipient_config.get("recipient_emails", ["xuefu.song@qq.com"])
+    recipient_emails = recipient_config.get("recipient_emails", ["snowwhite7654321@163.com"])
     recipient_name = recipient_config.get("recipient_name", "充电桩客服团队")
     
     logger.info(f"邮件发送节点 - 收件人: {recipient_name}, 邮箱列表: {recipient_emails}")
