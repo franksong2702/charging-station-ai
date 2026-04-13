@@ -33,12 +33,8 @@ class GlobalState(BaseModel):
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
     case_created: bool = Field(default=False, description="工单是否已创建")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引，用于邮件中只展示投诉相关的对话")
-    # 协商处理相关
-    negotiate_phase: str = Field(default="", description="协商处理阶段：asking/proposing/confirming/escalating")
-    problem_understanding: str = Field(default="", description="对用户问题的理解")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
     # 路由标记：用于 save_history 之后判断去哪个分支
-    route_after_save: str = Field(default="", description="save_history 之后的路由标记：save_record/cond_fallback/cond_negotiate")
+    route_after_save: str = Field(default="", description="save_history 之后的路由标记：save_record/cond_fallback")
 
 
 # ==================== 图的输入输出 ====================
@@ -54,11 +50,6 @@ class GraphInput(BaseModel):
     problem_summary: str = Field(default="", description="已生成的问题总结（可选）")
     user_supplement: str = Field(default="", description="用户补充内容（可选）")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述（可选）")
-    # 协商处理状态（用于多轮对话）
-    negotiate_phase: str = Field(default="", description="协商处理阶段（可选）")
-    problem_understanding: str = Field(default="", description="对用户问题的理解（可选）")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数（可选）")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（可选）")
 
 
 class GraphOutput(BaseModel):
@@ -182,11 +173,6 @@ class LoadHistoryInput(BaseModel):
     entry_problem: str = Field(default="", description="用户问题描述（来自 GraphInput）")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引（来自 GraphInput）")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结（来自 GraphInput）")
-    # 协商处理状态（来自 GraphInput）
-    negotiate_phase: str = Field(default="", description="协商处理阶段（来自 GraphInput）")
-    problem_understanding: str = Field(default="", description="对用户问题的理解（来自 GraphInput）")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数（来自 GraphInput）")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（来自 GraphInput）")
 
 
 class LoadHistoryOutput(BaseModel):
@@ -200,11 +186,6 @@ class LoadHistoryOutput(BaseModel):
     entry_problem: str = Field(default="", description="用户问题描述")
     conversation_truncate_index: int = Field(default=0, description="对话截断索引")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
-    # 协商处理状态
-    negotiate_phase: str = Field(default="", description="协商处理阶段")
-    problem_understanding: str = Field(default="", description="对用户问题的理解")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 # ==================== 保存对话历史节点 ====================
@@ -226,11 +207,6 @@ class SaveHistoryInput(BaseModel):
     user_supplement: str = Field(default="", description="用户补充内容")
     conversation_truncate_index: Optional[int] = Field(default=0, description="对话截断索引")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
-    # 协商处理状态
-    negotiate_phase: str = Field(default="", description="协商处理阶段")
-    problem_understanding: str = Field(default="", description="对用户问题的理解")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 class SaveHistoryOutput(BaseModel):
@@ -238,11 +214,6 @@ class SaveHistoryOutput(BaseModel):
     saved: bool = Field(default=True, description="是否保存成功")
     conversation_history: List[Dict[str, str]] = Field(default=[], description="最新的对话历史（包含刚保存的这一轮）")
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
-    # 协商处理状态
-    negotiate_phase: str = Field(default="", description="协商处理阶段")
-    problem_understanding: str = Field(default="", description="对用户问题的理解")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程")
 
 
 # ==================== 不满意处理节点 ====================
@@ -298,8 +269,6 @@ class FallbackOutput(BaseModel):
     user_supplement: str = Field(default="", description="用户补充内容")
     entry_problem: str = Field(default="", description="用户进入兜底流程时的问题描述")
     case_confirmed: bool = Field(default=False, description="用户是否已确认")
-    # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
-    conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
     # 截断索引：只展示这个索引之后的对话（这次投诉的对话）
     conversation_truncate_index: Optional[int] = Field(default=None, description="对话截断索引，用于邮件中只展示投诉相关的对话")
 
@@ -358,25 +327,6 @@ class CaseConfirmedCheck(BaseModel):
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
 
 
-# ==================== 协商处理节点 ====================
-
-class NegotiateInput(BaseModel):
-    """协商处理节点的输入"""
-    user_message: str = Field(..., description="用户发送的消息")
-    conversation_history: List[Dict[str, str]] = Field(default=[], description="对话历史记录")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
-
-
-class NegotiateOutput(BaseModel):
-    """协商处理节点的输出"""
-    reply_content: str = Field(..., description="回复给用户的内容")
-    negotiate_phase: str = Field(default="asking", description="协商阶段：asking(追问)/proposing(给方案)/confirming(确认)")
-    problem_understanding: str = Field(default="", description="对用户问题的理解")
-    route_after_save: str = Field(default="save_record", description="save_history 之后的路由：save_record/cond_fallback")
-    route_to_fallback: bool = Field(default=False, description="是否需要路由到兜底流程（协商失败时）")
-    negotiate_round_count: int = Field(default=0, description="协商轮数计数")
-
-
 # ==================== Summary Agent 节点 ====================
 
 class SummaryInput(BaseModel):
@@ -390,17 +340,8 @@ class SummaryOutput(BaseModel):
     simple_problem: str = Field(default="", description="简单问题描述")
 
 
-# ==================== 协商处理条件节点输入类型 ====================
-
-class NegotiateRouteCheck(BaseModel):
-    """协商处理路由的条件输入"""
-    user_message: str = Field(default="", description="用户发送的消息")
-
-
 class AfterSaveRouteCheck(BaseModel):
     """save_history 之后路由检查的输入"""
-    route_after_save: str = Field(default="", description="路由标记：save_record/cond_fallback/cond_negotiate")
+    route_after_save: str = Field(default="", description="路由标记：save_record/cond_fallback")
     # 兜底流程相关
     case_confirmed: bool = Field(default=False, description="用户是否已确认问题总结")
-    # 协商处理相关
-    user_message: str = Field(default="", description="用户消息（用于协商处理路由判断）")
