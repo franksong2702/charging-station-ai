@@ -160,8 +160,31 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             entry_problem = problem_text
             problem_summary = entry_problem.replace("用户", "您")
 
-    # 检查确认词
-    if _is_confirm(user_message):
+    # 先判断问题是否明确，再检查确认词
+    # 整合问题信息（用于 LLM 判断）
+    problem_for_judge = entry_problem or user_message
+    
+    # 如果 entry_problem 很简短（只有"我要投诉"、"有问题"等），且当前 user_message 更具体，优先用当前 user_message
+    if entry_problem and len(entry_problem) < 15 and len(user_message) > len(entry_problem):
+        # 检查 entry_problem 是否是空泛的表达
+        vague_keywords = ["我要投诉", "有问题", "帮我处理", "投诉", "处理一下", "帮我"]
+        is_vague = any(keyword in entry_problem for keyword in vague_keywords)
+        
+        if is_vague:
+            # entry_problem 是空泛的，用当前更具体的 user_message
+            problem_for_judge = user_message
+            # 同时更新 entry_problem，避免下一轮又回到空泛的判断
+            entry_problem = user_message
+            problem_summary = user_message.replace("用户", "您")
+    
+    if problem_summary and problem_summary != entry_problem:
+        problem_for_judge = problem_summary
+
+    # 判断问题是否明确
+    is_clear = _is_problem_clear(ctx, problem_for_judge)
+    
+    # 检查确认词 - 只有问题明确时才检查
+    if is_clear and _is_confirm(user_message):
         has_phone = bool(phone)
         has_license = bool(license_plate)
         has_problem = bool(problem_summary or entry_problem)
@@ -219,31 +242,8 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             )
 
     # ============================================
-    # 动态判断逻辑：用 LLM 判断问题是否明确
+    # 根据 is_clear 判断后续流程
     # ============================================
-
-    # 整合问题信息（用于 LLM 判断）
-    # 关键修复：如果 entry_problem 比较空泛，而当前 user_message 更具体，用当前 user_message
-    problem_for_judge = entry_problem or user_message
-    
-    # 如果 entry_problem 很简短（只有"我要投诉"、"有问题"等），且当前 user_message 更具体，优先用当前 user_message
-    if entry_problem and len(entry_problem) < 15 and len(user_message) > len(entry_problem):
-        # 检查 entry_problem 是否是空泛的表达
-        vague_keywords = ["我要投诉", "有问题", "帮我处理", "投诉", "处理一下", "帮我"]
-        is_vague = any(keyword in entry_problem for keyword in vague_keywords)
-        
-        if is_vague:
-            # entry_problem 是空泛的，用当前更具体的 user_message
-            problem_for_judge = user_message
-            # 同时更新 entry_problem，避免下一轮又回到空泛的判断
-            entry_problem = user_message
-            problem_summary = user_message.replace("用户", "您")
-    
-    if problem_summary and problem_summary != entry_problem:
-        problem_for_judge = problem_summary
-
-    # 判断问题是否明确
-    is_clear = _is_problem_clear(ctx, problem_for_judge)
 
     if is_clear:
         # 问题明确：直接收集手机号和车牌号
