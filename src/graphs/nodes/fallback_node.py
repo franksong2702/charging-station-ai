@@ -278,12 +278,14 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     else:
         # 问题不明确：追问详情，同时更新 entry_problem
         # 将用户的补充信息合并到 entry_problem
-        if user_message and len(user_message) > 2:
-            if entry_problem and len(entry_problem) > 2:
-                # 已有 entry_problem，追加新信息
+        if user_message and len(user_message) >= 2:
+            # 检查 entry_problem 是否在第 168-178 行已经更新过
+            # 如果 entry_problem 等于 user_message，说明已经在第 177 行更新过了，不需要再追加
+            if entry_problem and entry_problem != user_message and len(entry_problem) >= 2:
+                # 已有 entry_problem，且不是刚更新的，追加新信息
                 entry_problem = f"{entry_problem} {user_message}"
-            else:
-                # 没有 entry_problem，使用当前 user_message
+            elif not entry_problem or len(entry_problem) < 2:
+                # 没有 entry_problem 或 entry_problem 太短，使用当前 user_message
                 entry_problem = user_message
             # 同步更新 problem_summary
             problem_summary = entry_problem.replace("用户", "您")
