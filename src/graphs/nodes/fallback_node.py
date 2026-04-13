@@ -276,7 +276,18 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             conversation_truncate_index=conversation_truncate_index
         )
     else:
-        # 问题不明确：追问详情
+        # 问题不明确：追问详情，同时更新 entry_problem
+        # 将用户的补充信息合并到 entry_problem
+        if user_message and len(user_message) > 2:
+            if entry_problem and len(entry_problem) > 2:
+                # 已有 entry_problem，追加新信息
+                entry_problem = f"{entry_problem} {user_message}"
+            else:
+                # 没有 entry_problem，使用当前 user_message
+                entry_problem = user_message
+            # 同步更新 problem_summary
+            problem_summary = entry_problem.replace("用户", "您")
+        
         reply_content = _generate_followup_question(entry_problem, user_message)
         return FallbackOutput(
             reply_content=reply_content,
@@ -285,7 +296,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             license_plate=license_plate,
             problem_summary=problem_summary or entry_problem,
             user_supplement="",
-            entry_problem=entry_problem,  # 确保返回更新后的 entry_problem
+            entry_problem=entry_problem,  # 返回更新后的 entry_problem
             case_confirmed=False,
             conversation_truncate_index=conversation_truncate_index
         )
