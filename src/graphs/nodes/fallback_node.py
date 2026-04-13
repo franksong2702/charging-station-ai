@@ -307,12 +307,27 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
 def _generate_followup_question(entry_problem: str, user_message: str) -> str:
     """生成追问问题（问题不明确时使用）"""
     
+    # 检查是否已经有地点相关信息（扩展关键词）
+    has_location = any(keyword in entry_problem for keyword in [
+        "地点", "哪个", "哪里", "充电站", "小程序", "平台", "站", "园", "点", "app", "APP"
+    ])
+    
+    # 检查是否已经有问题现象相关信息
+    has_problem = any(keyword in entry_problem for keyword in [
+        "充", "扣", "坏", "问题", "故障", "不行", "没用", "退款", "投诉"
+    ])
+    
     # 如果用户已经说了一些内容，针对性追问
     if entry_problem and len(entry_problem) > 5:
-        if "地点" not in entry_problem and "哪个" not in entry_problem and "哪里" not in entry_problem:
+        if not has_location:
+            # 还没有地点信息，追问地点
             return "好的，请问您是在哪个充电站或者平台遇到的这个问题呢？大概是什么时间？"
-        elif "充" not in entry_problem and "扣" not in entry_problem and "坏" not in entry_problem:
+        elif not has_problem:
+            # 已有地点，但还没有具体问题现象，追问问题
             return "明白了。请问您具体遇到了什么问题呢？是充不进去电、扣费有问题，还是其他情况？"
+        else:
+            # 已有地点和问题，让用户补充更多细节或确认
+            return "好的，情况我了解了。请问还有其他需要补充的信息吗？或者您可以告诉我手机号和车牌号，我来帮您创建工单。"
     
     # 通用追问
     return "好的，请问您具体遇到了什么情况？能详细说说吗？比如是在哪个平台充电的、什么时候、在哪里、遇到了什么问题？"
