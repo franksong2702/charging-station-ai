@@ -223,7 +223,22 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
     # ============================================
 
     # 整合问题信息（用于 LLM 判断）
+    # 关键修复：如果 entry_problem 比较空泛，而当前 user_message 更具体，用当前 user_message
     problem_for_judge = entry_problem or user_message
+    
+    # 如果 entry_problem 很简短（只有"我要投诉"、"有问题"等），且当前 user_message 更具体，优先用当前 user_message
+    if entry_problem and len(entry_problem) < 15 and len(user_message) > len(entry_problem):
+        # 检查 entry_problem 是否是空泛的表达
+        vague_keywords = ["我要投诉", "有问题", "帮我处理", "投诉", "处理一下", "帮我"]
+        is_vague = any(keyword in entry_problem for keyword in vague_keywords)
+        
+        if is_vague:
+            # entry_problem 是空泛的，用当前更具体的 user_message
+            problem_for_judge = user_message
+            # 同时更新 entry_problem，避免下一轮又回到空泛的判断
+            entry_problem = user_message
+            problem_summary = user_message.replace("用户", "您")
+    
     if problem_summary and problem_summary != entry_problem:
         problem_for_judge = problem_summary
 
@@ -256,7 +271,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             license_plate=license_plate,
             problem_summary=problem_summary or entry_problem,
             user_supplement="",
-            entry_problem=entry_problem,
+            entry_problem=entry_problem,  # 确保返回更新后的 entry_problem
             case_confirmed=False,
             conversation_truncate_index=conversation_truncate_index
         )
@@ -270,7 +285,7 @@ def fallback_node(state: FallbackInput, config: RunnableConfig, runtime: Runtime
             license_plate=license_plate,
             problem_summary=problem_summary or entry_problem,
             user_supplement="",
-            entry_problem=entry_problem,
+            entry_problem=entry_problem,  # 确保返回更新后的 entry_problem
             case_confirmed=False,
             conversation_truncate_index=conversation_truncate_index
         )
