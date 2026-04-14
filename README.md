@@ -27,6 +27,29 @@ bash scripts/local_run.sh -m node -n node_name
 bash scripts/http_run.sh -m http -p 5000
 ```
 
+### AI User Agent 集成测试
+
+```bash
+# 先配置环境变量（参考 .env.example）
+export COZE_API_TOKEN="..."
+export AI_USER_AGENT_TOKEN="..."
+export COZE_WORKFLOW_PROJECT_ID="7619179949030801458"
+
+# 可选：覆盖默认地址
+export COZE_WORKFLOW_API="https://wp5bsz5qfm.coze.site/run"
+export AI_USER_AGENT_API="https://jr9h465hzr.coze.site/stream_run"
+export AI_USER_AGENT_PROJECT_ID="7627835614766841865"
+
+# 运行集成测试
+python src/tests/ai_user_integration_test.py --max-turns 8
+```
+
+测试报告会输出到 `/tmp/ai_user_integration_test_*.md`。
+
+安全保护：
+- 脚本默认拒绝对线上客服正式环境执行测试（`https://wxvghzzb8f.coze.site/run`）。
+- 若必须覆盖，需显式设置：`export ALLOW_PROD_TEST=true`。
+
 ### 输入格式
 
 ```json
