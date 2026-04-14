@@ -1,0 +1,31 @@
+{
+  "profiles": [
+    {
+      "profile_id": "p_standard_01",
+      "scenario_type": "standard_complaint",
+      "base_user_id": "ai_user_it_standard_complaint",
+      "phone": "13812345671",
+      "license_plate": "沪A12345",
+      "complaint_opening": "您好，我要投诉。昨天下午四点左右，我在高新区科技园23号充电桩充电，充了25分钟一点电都没进去，但账户被扣了45元，麻烦帮我核实处理。",
+      "confirmation_reply": "确认"
+    },
+    {
+      "profile_id": "p_angry_01",
+      "scenario_type": "angry_user",
+      "base_user_id": "ai_user_it_angry_user",
+      "phone": "13812345672",
+      "license_plate": "浙B77889",
+      "complaint_opening": "我要投诉！刚才在城北商圈17号桩插着枪半小时都没充进去，APP还扣了40块，这个问题太离谱了，马上帮我处理。",
+      "confirmation_reply": "确认"
+    },
+    {
+      "profile_id": "p_corrective_01",
+      "scenario_type": "corrective",
+      "base_user_id": "ai_user_it_corrective",
+      "phone": "13812345673",
+      "license_plate": "苏B98765",
+      "complaint_opening": "您好，我要投诉。今天上午10点15分我在城西政务中心停车场8号充电桩充电，设备显示连接成功但20分钟都没充进电，还扣了36元，请帮我尽快处理。",
+      "confirmation_reply": "确认"
+    }
+  ]
+}

@@ -42,9 +42,39 @@ export AI_USER_AGENT_PROJECT_ID="7627835614766841865"
 
 # 运行集成测试
 python src/tests/ai_user_integration_test.py --max-turns 8
+# 指定 profile 文件与 run_id（可选，推荐）
+python src/tests/ai_user_integration_test.py --profiles src/tests/testdata/user_profiles.json --run-id 20260414a
 ```
 
-测试报告会输出到 `/tmp/ai_user_integration_test_*.md`。
+测试报告会输出到 `/tmp/ai_user_integration_test_*.md`，并包含：
+- 每个用例完整原始用户/客服对话；
+- 若触发兜底工单，自动拉取收件箱并附上命中的兜底邮件原文摘录与校验结果。
+
+若要启用邮件校验，请补充：
+
+```bash
+export ENABLE_EMAIL_CHECK=true
+export TEST_EMAIL_IMAP_HOST="imap.qq.com"
+export TEST_EMAIL_IMAP_PORT="993"
+export TEST_EMAIL_IMAP_USERNAME="..."
+export TEST_EMAIL_IMAP_PASSWORD="..."   # 邮箱授权码
+export TEST_EMAIL_IMAP_MAILBOX="INBOX"
+export REQUIRE_EMAIL_CHECK=true
+```
+
+`src/tests/testdata/user_profiles.json` 中维护稳定测试身份（`base_user_id / phone / license_plate`），
+脚本会用 `base_user_id + run_id` 生成本次 `workflow_user_id`，并在每个场景后强制校验 `case_records` 落库。
+
+### 凭证安全存储（Keychain，推荐）
+
+```bash
+# 先把当前环境变量写入 Keychain（一次即可）
+scripts/security/save_secrets_to_keychain.sh
+
+# 每次测试前加载（不落盘到 .env）
+source scripts/security/export_env_from_keychain.sh
+python src/tests/ai_user_integration_test.py --max-turns 8
+```
 
 安全保护：
 - 脚本默认拒绝对线上客服正式环境执行测试（`https://wxvghzzb8f.coze.site/run`）。

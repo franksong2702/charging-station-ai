@@ -291,6 +291,10 @@ def email_sending_node(
                     <span class="value">{case_id}</span>
                 </div>
                 <div class="field">
+                    <span class="label">🧭 会话标识：</span>
+                    <span class="value">{state.user_id or "未知"}</span>
+                </div>
+                <div class="field">
                     <span class="label">📱 手机号：</span>
                     <span class="value">{phone}</span>
                 </div>
@@ -310,6 +314,7 @@ def email_sending_node(
                 此邮件由充电桩智能客服系统自动发送 | 时间：{formatdate(localtime=True)}
             </div>
         </div>
+        <!-- workflow_user_id:{state.user_id or ""} -->
     </body>
     </html>
     """
