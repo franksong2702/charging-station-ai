@@ -76,6 +76,21 @@ source scripts/security/export_env_from_keychain.sh
 python src/tests/ai_user_integration_test.py --max-turns 8
 ```
 
+### 严格回归（推荐入口）
+
+```bash
+scripts/tests/run_strict_regression.sh
+```
+
+准入门槛：
+- `case_records` 落库 = `PASSED`
+- 邮件校验 = `PASSED`
+- 每个场景有完整原始对话记录
+
+完整流程与模板：
+- [测试工作流 SOP v1](docs/测试工作流_SOP_v1.md)
+- [测试报告模板（严格模式）](docs/测试报告模板_严格模式_v1.md)
+
 安全保护：
 - 脚本默认拒绝对线上客服正式环境执行测试（`https://wxvghzzb8f.coze.site/run`）。
 - 若必须覆盖，需显式设置：`export ALLOW_PROD_TEST=true`。
