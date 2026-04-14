@@ -30,6 +30,23 @@ export TEST_EMAIL_IMAP_USERNAME="$(read_secret test_email_imap_username)"
 export TEST_EMAIL_IMAP_PASSWORD="$(read_secret test_email_imap_password)"
 export TEST_EMAIL_IMAP_MAILBOX="$(read_secret test_email_imap_mailbox)"
 
+# Prefer latest CLI token when available to avoid using expired cached tokens.
+if [[ -f "$HOME/.coze/config.json" ]]; then
+  latest_token="$(python3 - <<'PY'
+import json, os
+p=os.path.expanduser("~/.coze/config.json")
+try:
+    print(json.load(open(p)).get("accessToken",""))
+except Exception:
+    print("")
+PY
+)"
+  if [[ -n "${latest_token}" ]]; then
+    export COZE_API_TOKEN="${latest_token}"
+    export AI_USER_AGENT_TOKEN="${latest_token}"
+  fi
+fi
+
 export ENABLE_EMAIL_CHECK="true"
 export REQUIRE_EMAIL_CHECK="true"
 

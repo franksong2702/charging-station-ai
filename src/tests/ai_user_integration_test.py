@@ -35,6 +35,7 @@ TEST_WORKFLOW_PROJECT_ID = "7619179949030801458"
 DEFAULT_MAILBOX = "INBOX"
 DEFAULT_IMAP_HOST = "imap.qq.com"
 DEFAULT_IMAP_PORT = 993
+DEFAULT_EMAIL_POLL_SECONDS = 120
 
 
 @dataclass
@@ -111,6 +112,18 @@ def require_env(name: str, default: str = "") -> str:
     if not value:
         raise ValueError(f"缺少环境变量: {name}")
     return value
+
+
+def read_latest_coze_cli_token() -> str:
+    config_path = os.path.expanduser("~/.coze/config.json")
+    if not os.path.exists(config_path):
+        return ""
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return (data.get("accessToken") or "").strip()
+    except Exception:
+        return ""
 
 
 def strip_think_tags(text: str) -> str:
@@ -301,7 +314,9 @@ def load_mail_config() -> MailConfig:
         mailbox=os.getenv("TEST_EMAIL_IMAP_MAILBOX", DEFAULT_MAILBOX).strip() or DEFAULT_MAILBOX,
         sender_filter=os.getenv("TEST_EMAIL_SENDER_FILTER", "").strip(),
         subject_keyword=os.getenv("TEST_EMAIL_SUBJECT_KEYWORD", "【充电桩客服】用户问题反馈").strip(),
-        poll_seconds=int(os.getenv("TEST_EMAIL_POLL_SECONDS", "60").strip()),
+        poll_seconds=int(
+            os.getenv("TEST_EMAIL_POLL_SECONDS", str(DEFAULT_EMAIL_POLL_SECONDS)).strip()
+        ),
         max_scan=int(os.getenv("TEST_EMAIL_MAX_SCAN", "80").strip()),
         lookback_minutes=int(os.getenv("TEST_EMAIL_LOOKBACK_MINUTES", "60").strip()),
     )
@@ -329,7 +344,7 @@ def find_and_validate_fallback_email(
             reason="缺少 TEST_EMAIL_IMAP_USERNAME / TEST_EMAIL_IMAP_PASSWORD，无法校验邮件",
         )
 
-    start_window = scenario_start_ts - max(mail_cfg.lookback_minutes * 60, 0)
+    start_window = scenario_start_ts - min(max(mail_cfg.lookback_minutes * 60, 0), 120)
     deadline = time.time() + max(mail_cfg.poll_seconds, 1)
     phone = guess_phone_from_conversation(conversation)
     first_user_message = ""
@@ -395,12 +410,17 @@ def find_and_validate_fallback_email(
                         x for x in [text_body, html_to_text(html_body)] if x
                     )
                     matched_by = ""
-                    if workflow_user_id and workflow_user_id in normalized_body:
-                        matched_by = "workflow_user_id"
-                    elif phone and phone in subject + " " + normalized_body:
-                        matched_by = "phone"
-                    elif first_user_message and first_user_message in normalized_body:
-                        matched_by = "first_user_message"
+                    # When workflow_user_id is available, enforce exact traceability.
+                    if workflow_user_id:
+                        if workflow_user_id in normalized_body:
+                            matched_by = "workflow_user_id"
+                        else:
+                            continue
+                    else:
+                        if phone and phone in subject + " " + normalized_body:
+                            matched_by = "phone"
+                        elif first_user_message and first_user_message in normalized_body:
+                            matched_by = "first_user_message"
                     if not matched_by:
                         continue
 
@@ -546,11 +566,12 @@ def call_ai_user_agent(
     session_id: str = "",
     timeout: int = 90,
 ) -> dict[str, str] | None:
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-    }
+    def _headers(tok: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {tok}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        }
     payload = {
         "content": {
             "query": {
@@ -576,11 +597,21 @@ def call_ai_user_agent(
     try:
         response = requests.post(
             api_url,
-            headers=headers,
+            headers=_headers(token),
             json=payload,
             stream=True,
             timeout=timeout,
         )
+        if response.status_code == 401:
+            fresh = read_latest_coze_cli_token()
+            if fresh and fresh != token:
+                response = requests.post(
+                    api_url,
+                    headers=_headers(fresh),
+                    json=payload,
+                    stream=True,
+                    timeout=timeout,
+                )
         if response.status_code != 200:
             print(f"[AI 用户] HTTP {response.status_code}: {response.text[:200]}")
             return None
@@ -622,10 +653,11 @@ def call_ai_service(
     conversation_history: list[dict[str, str]],
     timeout: int = 90,
 ) -> str | None:
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    def _headers(tok: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {tok}",
+            "Content-Type": "application/json",
+        }
     payload: dict[str, Any] = {
         "user_message": user_message,
         "user_id": user_id,
@@ -635,10 +667,19 @@ def call_ai_service(
     try:
         response = requests.post(
             api_url,
-            headers=headers,
+            headers=_headers(token),
             json=payload,
             timeout=timeout,
         )
+        if response.status_code == 401:
+            fresh = read_latest_coze_cli_token()
+            if fresh and fresh != token:
+                response = requests.post(
+                    api_url,
+                    headers=_headers(fresh),
+                    json=payload,
+                    timeout=timeout,
+                )
         if response.status_code != 200:
             print(f"[AI 客服] HTTP {response.status_code}: {response.text[:200]}")
             return None
